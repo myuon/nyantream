@@ -12,8 +12,21 @@ extra-source-files:
 
 dependencies:
   - base >= 4.7 && < 5
+  - brick
+  - vty
+  - lens
+  - text
+  - vector
+  - time
+
+default-extensions:
+  - LambdaCase
+  - OverloadedStrings
+  - TemplateHaskell
 
 executables:
   nyantream:
     source-dirs:      src
     main:             Main.hs
+    ghc-options: -threaded
+
