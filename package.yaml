@@ -18,6 +18,7 @@ dependencies:
   - text
   - vector
   - time
+  - lens-datetime
   - monad-coroutine
   - authenticate-oauth
   - bytestring

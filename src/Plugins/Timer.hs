@@ -1,17 +1,29 @@
 module Plugins.Timer where
 
 import Brick.BChan
-import qualified Data.Text as T
-import Data.Time
+import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Coroutine
 import Control.Concurrent (threadDelay)
+import qualified Data.Text as T
+import Data.Time
+import Data.Time.Lens
 import Types
 
-fetch :: BChan Card -> IO ()
-fetch chan = forever $ do
-  threadDelay 1000000
-  time <- getCurrentTime
-  writeBChan chan $ Card "tm" "timer" (T.pack $ show time)
+-- hourly
+hscheduler :: BChan Card -> IO ()
+hscheduler chan = forever $ do
+  cur <- getZonedTime
+  let next = cur & flexDT . hours +~ 1 & flexDT . minutes .~ 0 & flexDT . seconds .~ 0
+  writeBChan chan $ Card "tm" "timer" (T.pack $ "current time: " ++ show cur ++ "\nnext: " ++ show next)
+  threadDelay $ fromInteger $ (`div` (1000 * 1000)) $ diffTimeToPicoseconds $ (next ^. timeAsDiff - cur ^. timeAsDiff)
+  go
+
+  where
+    go = do
+      cur <- getZonedTime
+      writeBChan chan $ Card "tm" "timer" (T.pack $ "current time: " ++ show cur)
+      threadDelay $ 1000 * 1000 * 60 * 60
+
 

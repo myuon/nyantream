@@ -74,7 +74,7 @@ defClient s =
     (W.editorText "minibuffer" (vBox . fmap txt) (Just 1) "")
 
 installedPlugins :: [BChan Card -> IO ()]
-installedPlugins = [twitterM "myuon_myon", fetch]
+installedPlugins = [twitterM "myuon_myon", hscheduler]
 
 main :: IO ()
 main = do
