@@ -9,29 +9,9 @@ import Control.Monad
 import Control.Concurrent (forkIO, threadDelay)
 import qualified Data.Vector as V
 import qualified Data.Text as T
-import Data.Time
 
-data Card
-  = Card
-  { _plugin :: T.Text
-  , _title :: T.Text
-  , _content :: T.Text
-  }
-
-makeLenses ''Card
-
-renderCard :: Bool -> Card -> Widget n
-renderCard selected card =
-  ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. plugin) <+> txt "] " <+> txt (card ^. title))
-  <=> txt (card ^. content)
-
-data Client
-  = Client
-  { _size :: (Int,Int)
-  , _timeline :: W.List String Card
-  }
-
-makeLenses ''Client
+import Types
+import Plugins.Timer
 
 app :: App Client Card String
 app = App
@@ -44,7 +24,8 @@ app = App
   where
     renderer cli = return $ vBox
       [ W.renderList renderCard True (cli ^. timeline)
-      , withAttr "inverted" $ padRight Max $ txt "--- *timeline* [tw/tm]"
+      , withAttr "inverted" $ padRight Max $ txt "--- *timeline* [sys/tw/tm]"
+      , txt " "
       ]
 
     evhandler cli = \case
@@ -61,13 +42,6 @@ app = App
     colorscheme =
       [ ("inverted", Vty.black `on` Vty.white)
       ]
-
-fetch :: BChan Card -> IO ()
-fetch chan = do
-  threadDelay 1000000
-  time <- getCurrentTime
-  writeBChan chan $ Card "tm" "timer" (T.pack $ show time)
-  fetch chan
 
 main :: IO ()
 main = do
