@@ -18,6 +18,14 @@ dependencies:
   - text
   - vector
   - time
+  - monad-coroutine
+  - authenticate-oauth
+  - bytestring
+  - conduit
+  - resourcet
+  - twitter-conduit
+  - twitter-types-lens
+  - mtl
 
 default-extensions:
   - LambdaCase

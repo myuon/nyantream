@@ -7,12 +7,14 @@ import qualified Brick.Widgets.Edit as W
 import qualified Graphics.Vty as Vty
 import Control.Lens
 import Control.Monad
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Monad.Coroutine
+import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
 
 import Types
 import Plugins.Timer
+import Plugins.Twitter
 
 data FocusOn = Timeline | Minibuffer
   deriving (Eq, Show)
@@ -71,11 +73,14 @@ defClient s =
     (W.list "timeline" (V.singleton sentinel) 2)
     (W.editorText "minibuffer" (vBox . fmap txt) (Just 1) "")
 
+installedPlugins :: [BChan Card -> IO ()]
+installedPlugins = [twitterM "myuon_myon", fetch]
+
 main :: IO ()
 main = do
   size <- Vty.displayBounds =<< Vty.outputForConfig =<< Vty.standardIOConfig
   chan <- newBChan 2
-  forkIO $ fetch chan
+  mapM_ (\p -> forkIO $ p chan) installedPlugins
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)
