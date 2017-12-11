@@ -11,6 +11,7 @@ import Control.Monad.IO.Class
 import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import Data.Text.Zipper (clearZipper)
 
 import Types
 
@@ -63,7 +64,7 @@ app = App
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
             liftIO (cli^.plugins^._2^?ix (cli^.plugins^._1)^._Just.to (flip updater (cli^.textarea^.to W.getEditContents)))
-            continue $ cli & focusing .~ Timeline
+            continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
       AppEvent card -> do

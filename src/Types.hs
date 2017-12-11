@@ -8,7 +8,7 @@ import qualified Data.Text as T
 
 data Card
   = Card
-  { _plugin :: T.Text
+  { _pluginOf :: T.Text
   , _title :: T.Text
   , _content :: T.Text
   }
@@ -25,7 +25,7 @@ txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
 
 renderCardWithIn :: Int -> Bool -> Card -> Widget n
 renderCardWithIn w selected card =
-  ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. plugin) <+> txt "] " <+> txt (card ^. title))
+  ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. pluginOf) <+> txt "] " <+> txt (card ^. title))
   <=> txtWrapper w (card ^. content)
 
 data Plugin

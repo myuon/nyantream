@@ -26,6 +26,7 @@ dependencies:
   - twitter-conduit
   - twitter-types-lens
   - mtl
+  - text-zipper
 
 default-extensions:
   - LambdaCase
