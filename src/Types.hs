@@ -4,7 +4,6 @@ module Types where
 import Brick
 import Brick.BChan
 import Control.Lens
-import Control.Monad.Coroutine
 import qualified Data.Text as T
 
 data Card
@@ -28,3 +27,11 @@ renderCardWithIn :: Int -> Bool -> Card -> Widget n
 renderCardWithIn w selected card =
   ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. plugin) <+> txt "] " <+> txt (card ^. title))
   <=> txtWrapper w (card ^. content)
+
+data Plugin
+  = Plugin
+  { pluginId :: T.Text
+  , fetcher :: BChan Card -> IO ()
+  , updater :: [T.Text] -> IO ()
+  }
+

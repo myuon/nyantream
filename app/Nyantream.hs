@@ -1,6 +1,7 @@
 module Nyantream where
 
 import Client
+import Types
 import Plugins.Twitter
 import Plugins.Timer
 

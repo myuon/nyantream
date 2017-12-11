@@ -19,7 +19,6 @@ dependencies:
   - vector
   - time
   - lens-datetime
-  - monad-coroutine
   - authenticate-oauth
   - bytestring
   - conduit

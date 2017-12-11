@@ -7,7 +7,7 @@ import qualified Brick.Widgets.Edit as W
 import qualified Graphics.Vty as Vty
 import Control.Lens
 import Control.Monad
-import Control.Monad.Coroutine
+import Control.Monad.IO.Class
 import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
@@ -24,6 +24,7 @@ data Client
   , _timeline :: W.List String Card
   , _minibuffer :: W.Editor T.Text String
   , _textarea :: W.Editor T.Text String
+  , _plugins :: (Int, [Plugin])
   }
 
 makeLenses ''Client
@@ -44,7 +45,7 @@ app = App
       ]
     renderer cli | cli^.focusing == Textarea = return $ vBox
       [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
-      , withAttr "inverted" $ padRight Max $ txt $ "--- [tw/?] *textarea* (C-c)send (C-q)quit"
+      , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)next plugin"
       , vLimit 5 $ W.renderEditor (cli^.focusing == Textarea) (cli ^. textarea)
       ]
 
@@ -60,6 +61,10 @@ app = App
           _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
         Textarea -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+            liftIO (cli^.plugins^._2^?ix (cli^.plugins^._1)^._Just.to (flip updater (cli^.textarea^.to W.getEditContents)))
+            continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
       AppEvent card -> do
         continue $ cli &~ do
@@ -84,20 +89,19 @@ defClient s =
     (W.list "timeline" (V.singleton sentinel) 2)
     (W.editorText "minibuffer" (txt . T.unlines) (Just 1) "")
     (W.editorText "textarea" (txt . T.unlines) (Just 5) "")
-
-type Plugin = BChan Card -> IO ()
+    (0,[])
 
 runClient :: [Plugin] -> IO ()
-runClient plugins = do
+runClient pls = do
   size <- Vty.displayBounds =<< Vty.outputForConfig =<< Vty.standardIOConfig
   chan <- newBChan 2
-  mapM_ (\p -> forkIO $ p chan) plugins
+  mapM_ (\p -> forkIO $ fetcher p chan) pls
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)
     (Just chan)
     app
-    (defClient size)
+    (defClient size & plugins .~ (0,pls))
 
   return ()
 
