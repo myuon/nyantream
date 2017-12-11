@@ -14,7 +14,7 @@ import qualified Data.Text as T
 
 import Types
 
-data FocusOn = Timeline | Minibuffer
+data FocusOn = Timeline | Minibuffer | Textarea
   deriving (Eq, Show)
 
 data Client
@@ -23,6 +23,7 @@ data Client
   , _focusing :: FocusOn
   , _timeline :: W.List String Card
   , _minibuffer :: W.Editor T.Text String
+  , _textarea :: W.Editor T.Text String
   }
 
 makeLenses ''Client
@@ -36,18 +37,30 @@ app = App
   (\_ -> attrMap (fg Vty.white) colorscheme)
 
   where
-    renderer cli = return $ vBox
+    renderer cli | cli^.focusing `elem` [Timeline, Minibuffer] = return $ vBox
       [ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
       , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
       , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
       ]
+    renderer cli | cli^.focusing == Textarea = return $ vBox
+      [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
+      , withAttr "inverted" $ padRight Max $ txt $ "--- [tw/?] *textarea* (C-c)send (C-q)quit"
+      , vLimit 5 $ W.renderEditor (cli^.focusing == Textarea) (cli ^. textarea)
+      ]
 
     evhandler cli = \case
-      VtyEvent (Vty.EvKey (Vty.KChar 'q') []) -> halt cli
-      VtyEvent (Vty.EvKey (Vty.KChar 'x') [Vty.MMeta]) -> continue $ cli & focusing .~ Minibuffer
       VtyEvent evkey -> case cli^.focusing of
-        Timeline -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
-        Minibuffer -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
+        Timeline -> case evkey of
+          Vty.EvKey (Vty.KChar 'q') [] -> halt cli
+          Vty.EvKey (Vty.KChar 'x') [Vty.MMeta] -> continue $ cli & focusing .~ Minibuffer
+          Vty.EvKey (Vty.KChar 'a') [Vty.MCtrl] -> continue $ cli & focusing .~ Textarea
+          _ -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
+        Minibuffer -> case evkey of
+          Vty.EvKey (Vty.KChar 'g') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
+          _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
+        Textarea -> case evkey of
+          Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
+          _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
       AppEvent card -> do
         continue $ cli &~ do
           timeline %= W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) card
@@ -69,7 +82,8 @@ defClient s =
     s
     Timeline
     (W.list "timeline" (V.singleton sentinel) 2)
-    (W.editorText "minibuffer" (vBox . fmap txt) (Just 1) "")
+    (W.editorText "minibuffer" (txt . T.unlines) (Just 1) "")
+    (W.editorText "textarea" (txt . T.unlines) (Just 5) "")
 
 type Plugin = BChan Card -> IO ()
 
