@@ -1,6 +1,7 @@
 module Plugins.Twitter where
 
 import Brick.BChan
+import Brick.Markup ((@?))
 import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
@@ -9,6 +10,8 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as C
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
+import Data.Text.Markup
+import Data.Monoid
 import Web.Authenticate.OAuth as OA
 import Web.Twitter.Conduit hiding (lookup,url)
 import Web.Twitter.Types.Lens
@@ -48,13 +51,16 @@ twitter account
 
       where
         at_ = to $ \x -> "@" `T.append` x
+        space_end = to $ \x -> x `T.append` " "
 
         fromStream :: BChan Card -> StreamingAPI -> IO ()
         fromStream chan = \case
           SStatus tw -> writeBChan chan $ renderStatus account tw
-          SRetweetedStatus rtw -> writeBChan chan $ renderStatus account (rtw^.rsRetweetedStatus) & title %~ T.append ((rtw^.rsUser^.screen_name^.at_) `T.append` " retweeted ")
+          SRetweetedStatus rtw -> writeBChan chan $ renderStatus account (rtw^.rsRetweetedStatus)
+            & title %~ (((rtw^.rsUser^.screen_name^.at_) @? "screen-name" <> " retweeted ") <>)
           SEvent ev | ev ^. evEvent == "favorite" -> case (ev^.evSource, ev^.evTargetObject) of
-            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ renderStatus account s & title %~ T.append ((u ^. screen_name) `T.append` " liked ")
+            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ renderStatus account s
+              & title %~ (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>)
             _ -> return ()
           _ -> return ()
 
@@ -62,10 +68,10 @@ twitter account
         renderStatus account tw
           = Card
             twplugin
-            (T.strip $ T.unwords
-             [ maysurround "(" ")" aux
-             , tw ^. user ^. name
-             , tw ^. user ^. screen_name ^. at_
+            (mconcat
+             [ maysurround "(" (")" ^. space_end) aux @? "aux"
+             , (tw ^. user ^. name ^. space_end) @? "user-name"
+             , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
              ])
             (tw ^. text)
 

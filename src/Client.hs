@@ -13,6 +13,7 @@ import Control.Monad.IO.Class
 import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import Data.Monoid
 import Data.Text.Zipper (clearZipper)
 
 import Types
@@ -51,7 +52,7 @@ app = App
       ]
     renderer cli | cli^.focusing == Textarea = return $ vBox
       [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
-      , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)next plugin"
+      , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
       , vLimit 5 $ W.renderEditor (cli^.focusing == Textarea) (cli ^. textarea)
       ]
 
@@ -81,15 +82,19 @@ app = App
           timeline %= W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) card
 
           let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
-          when (sel ^. title == sentinel ^. title) $ timeline %= W.listMoveDown
+          when (sel ^. pluginOf == sentinel ^. pluginOf) $ timeline %= W.listMoveDown
       _ -> continue cli
 
     colorscheme =
-      [ ("inverted", Vty.black `on` Vty.white)
+      [ ("plugin-id", fg Vty.brightBlue)
+      , ("user-name", Vty.withStyle Vty.currentAttr Vty.bold)
+      , ("screen-name", fg Vty.red)
+      , (attrName "inverted" <> attrName "card-content", Vty.black `on` Vty.white)
+      , ("inverted", Vty.black `on` Vty.white)
       ]
 
 sentinel :: Card
-sentinel = Card "sys" "sentinel" "--- fetching new cards ---"
+sentinel = Card "sys/sentinel" "sentinel" "--- fetching new cards ---"
 
 defClient :: (Int,Int) -> Client
 defClient s =
