@@ -27,17 +27,24 @@ getTWInfo account = do
      , ("oauth_token_secret", xs!!3) ])
     def
 
-
-fromStream :: T.Text -> BChan Card -> StreamingAPI -> IO ()
-fromStream account chan = \case
-  SStatus tw -> writeBChan chan $ Card ("tw/" `T.append` account) (tw ^. statusUser ^. userName) (tw ^. statusText)
-  _ -> return ()
-
-twitterM :: T.Text -> BChan Card -> IO ()
-twitterM account chan = do
+twitter :: T.Text -> BChan Card -> IO ()
+twitter account chan = do
   twInfo <- getTWInfo account
   manager <- newManager tlsManagerSettings
   runResourceT $ do
     src <- stream twInfo manager userstream
     src C.$$+- C.mapM_ (lift . fromStream account chan)
+
+  where
+    fromStream :: T.Text -> BChan Card -> StreamingAPI -> IO ()
+    fromStream account chan = \case
+      SStatus tw -> writeBChan chan $ renderStatus account tw
+      _ -> return ()
+
+    renderStatus :: T.Text -> Status -> Card
+    renderStatus account tw
+      = Card
+        ("tw/" `T.append` account)
+        ((tw ^. user ^. name) `T.append` " " `T.append` (tw ^. user ^. screen_name))
+        (tw ^. text)
 

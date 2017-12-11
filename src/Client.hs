@@ -13,8 +13,6 @@ import qualified Data.Vector as V
 import qualified Data.Text as T
 
 import Types
-import Plugins.Timer
-import Plugins.Twitter
 
 data FocusOn = Timeline | Minibuffer
   deriving (Eq, Show)
