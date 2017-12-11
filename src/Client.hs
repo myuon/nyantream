@@ -1,4 +1,4 @@
-module Main where
+module Client where
 
 import Brick
 import Brick.BChan
@@ -73,14 +73,13 @@ defClient s =
     (W.list "timeline" (V.singleton sentinel) 2)
     (W.editorText "minibuffer" (vBox . fmap txt) (Just 1) "")
 
-installedPlugins :: [BChan Card -> IO ()]
-installedPlugins = [twitterM "myuon_myon", hscheduler]
+type Plugin = BChan Card -> IO ()
 
-main :: IO ()
-main = do
+runClient :: [Plugin] -> IO ()
+runClient plugins = do
   size <- Vty.displayBounds =<< Vty.outputForConfig =<< Vty.standardIOConfig
   chan <- newBChan 2
-  mapM_ (\p -> forkIO $ p chan) installedPlugins
+  mapM_ (\p -> forkIO $ p chan) plugins
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)

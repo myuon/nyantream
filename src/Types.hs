@@ -21,14 +21,14 @@ renderCard selected card =
   ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. plugin) <+> txt "] " <+> txt (card ^. title))
   <=> txt (card ^. content)
 
-data Plugin r
+data PluginM r
   = AwaitLine (String -> r)
   | Async (BChan Card -> IO ()) r
   deriving Functor
 
-awaitLine :: Monad m => Coroutine Plugin m String
+awaitLine :: Monad m => Coroutine PluginM m String
 awaitLine = suspend $ AwaitLine return
 
-async :: Monad m => (BChan Card -> IO ()) -> Coroutine Plugin m ()
+async :: Monad m => (BChan Card -> IO ()) -> Coroutine PluginM m ()
 async m = suspend $ Async m (return ())
 

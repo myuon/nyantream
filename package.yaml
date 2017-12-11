@@ -33,9 +33,15 @@ default-extensions:
   - OverloadedStrings
   - TemplateHaskell
 
+library:
+  source-dirs: src
+  ghc-options: -O2
+
 executables:
   nyantream:
-    source-dirs:      src
-    main:             Main.hs
-    ghc-options: -threaded
+    source-dirs:
+    - src
+    - app
+    main: Nyantream.hs
+    ghc-options: -threaded -main-is Nyantream
 
