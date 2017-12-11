@@ -27,17 +27,40 @@ getTWInfo account = do
      , ("oauth_token_secret", xs!!3) ])
     def
 
+twitter :: T.Text -> Plugin
+twitter account
+  = Plugin
+  { pluginId = "tw/" `T.append` account
+  , fetcher = fetcher
+  , updater = updater
+  }
 
-fromStream :: T.Text -> BChan Card -> StreamingAPI -> IO ()
-fromStream account chan = \case
-  SStatus tw -> writeBChan chan $ Card ("tw/" `T.append` account) (tw ^. statusUser ^. userName) (tw ^. statusText)
-  _ -> return ()
+  where
+    fetcher :: BChan Card -> IO ()
+    fetcher chan = do
+      twInfo <- getTWInfo account
+      manager <- newManager tlsManagerSettings
+      runResourceT $ do
+        src <- stream twInfo manager userstream
+        src C.$$+- C.mapM_ (lift . fromStream chan)
 
-twitterM :: T.Text -> BChan Card -> IO ()
-twitterM account chan = do
-  twInfo <- getTWInfo account
-  manager <- newManager tlsManagerSettings
-  runResourceT $ do
-    src <- stream twInfo manager userstream
-    src C.$$+- C.mapM_ (lift . fromStream account chan)
+      where
+        fromStream :: BChan Card -> StreamingAPI -> IO ()
+        fromStream chan = \case
+          SStatus tw -> writeBChan chan $ renderStatus account tw
+          _ -> return ()
+
+        renderStatus :: T.Text -> Status -> Card
+        renderStatus account tw
+          = Card
+            ("tw/" `T.append` account)
+            ((tw ^. user ^. name) `T.append` " @" `T.append` (tw ^. user ^. screen_name))
+            (tw ^. text)
+
+    updater :: [T.Text] -> IO ()
+    updater tw = do
+      twInfo <- getTWInfo account
+      manager <- newManager tlsManagerSettings
+      call twInfo manager $ update $ T.unlines tw
+      return ()
 

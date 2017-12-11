@@ -1,5 +1,5 @@
 name:                nyantream
-version:             0.1.0.0
+version:             0.2.0.0
 #synopsis:
 #description:
 homepage:            https://github.com/myuon/nyantream#readme
@@ -18,7 +18,7 @@ dependencies:
   - text
   - vector
   - time
-  - monad-coroutine
+  - lens-datetime
   - authenticate-oauth
   - bytestring
   - conduit
@@ -32,9 +32,15 @@ default-extensions:
   - OverloadedStrings
   - TemplateHaskell
 
+library:
+  source-dirs: src
+  ghc-options: -O2
+
 executables:
   nyantream:
-    source-dirs:      src
-    main:             Main.hs
-    ghc-options: -threaded
+    source-dirs:
+    - src
+    - app
+    main: Nyantream.hs
+    ghc-options: -threaded -main-is Nyantream
 
