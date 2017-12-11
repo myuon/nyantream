@@ -16,10 +16,18 @@ data Card
 
 makeLenses ''Card
 
-renderCard :: Bool -> Card -> Widget n
-renderCard selected card =
+txtWrapper :: Int -> T.Text -> Widget n
+txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
+  go :: [T.Text] -> Char -> [T.Text]
+  go [] ch = [T.singleton ch]
+  go (x:xs) ch
+    | textWidth (T.snoc x ch) >= w = T.singleton ch:x:xs
+    | otherwise = T.snoc x ch:xs
+
+renderCardWithIn :: Int -> Bool -> Card -> Widget n
+renderCardWithIn w selected card =
   ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. plugin) <+> txt "] " <+> txt (card ^. title))
-  <=> txt (card ^. content)
+  <=> txtWrapper w (card ^. content)
 
 data PluginM r
   = AwaitLine (String -> r)

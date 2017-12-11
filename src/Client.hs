@@ -37,7 +37,7 @@ app = App
 
   where
     renderer cli = return $ vBox
-      [ W.renderList renderCard (cli^.focusing == Timeline) (cli ^. timeline)
+      [ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
       , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
       , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
       ]

@@ -45,6 +45,6 @@ twitter account chan = do
     renderStatus account tw
       = Card
         ("tw/" `T.append` account)
-        ((tw ^. user ^. name) `T.append` " " `T.append` (tw ^. user ^. screen_name))
+        ((tw ^. user ^. name) `T.append` " @" `T.append` (tw ^. user ^. screen_name))
         (tw ^. text)
 
