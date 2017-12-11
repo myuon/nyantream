@@ -1,6 +1,7 @@
 module Plugins.Twitter where
 
 import Brick.BChan
+import Brick.Markup ((@?))
 import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
@@ -9,6 +10,8 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as C
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
+import Data.Text.Markup
+import Data.Monoid
 import Web.Authenticate.OAuth as OA
 import Web.Twitter.Conduit hiding (lookup,url)
 import Web.Twitter.Types.Lens
@@ -30,12 +33,14 @@ getTWInfo account = do
 twitter :: T.Text -> Plugin
 twitter account
   = Plugin
-  { pluginId = "tw/" `T.append` account
+  { pluginId = twplugin
   , fetcher = fetcher
   , updater = updater
   }
 
   where
+    twplugin = "tw/" `T.append` account
+
     fetcher :: BChan Card -> IO ()
     fetcher chan = do
       twInfo <- getTWInfo account
@@ -45,17 +50,39 @@ twitter account
         src C.$$+- C.mapM_ (lift . fromStream chan)
 
       where
+        at_ = to $ \x -> "@" `T.append` x
+        space_end = to $ \x -> x `T.append` " "
+
         fromStream :: BChan Card -> StreamingAPI -> IO ()
         fromStream chan = \case
           SStatus tw -> writeBChan chan $ renderStatus account tw
+          SRetweetedStatus rtw -> writeBChan chan $ renderStatus account (rtw^.rsRetweetedStatus)
+            & title %~ (((rtw^.rsUser^.screen_name^.at_) @? "screen-name" <> " retweeted ") <>)
+          SEvent ev | ev ^. evEvent == "favorite" -> case (ev^.evSource, ev^.evTargetObject) of
+            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ renderStatus account s
+              & title %~ (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>)
+            _ -> return ()
           _ -> return ()
 
         renderStatus :: T.Text -> Status -> Card
         renderStatus account tw
           = Card
-            ("tw/" `T.append` account)
-            ((tw ^. user ^. name) `T.append` " @" `T.append` (tw ^. user ^. screen_name))
+            twplugin
+            (mconcat
+             [ maysurround "(" (")" ^. space_end) aux @? "aux"
+             , (tw ^. user ^. name ^. space_end) @? "user-name"
+             , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
+             ])
             (tw ^. text)
+
+          where
+            maysurround st ed xs = if T.null xs then "" else st `T.append` xs `T.append` ed
+
+            aux = T.concat
+              [ tw ^. statusFavorited ^. _Just . to (\b -> if b then "★" else "")
+              , tw ^. statusRetweeted ^. _Just . to (\b -> if b then "🔃" else "")
+              , tw ^. statusInReplyToStatusId ^. _Just . to (const "▷")
+              ]
 
     updater :: [T.Text] -> IO ()
     updater tw = do

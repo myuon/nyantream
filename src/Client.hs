@@ -2,6 +2,8 @@ module Client where
 
 import Brick
 import Brick.BChan
+import qualified Brick.Widgets.Border as W
+import qualified Brick.Widgets.Center as W
 import qualified Brick.Widgets.List as W
 import qualified Brick.Widgets.Edit as W
 import qualified Graphics.Vty as Vty
@@ -11,10 +13,12 @@ import Control.Monad.IO.Class
 import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import Data.Monoid
+import Data.Text.Zipper (clearZipper)
 
 import Types
 
-data FocusOn = Timeline | Minibuffer | Textarea
+data FocusOn = Timeline | Minibuffer | Textarea | Item
   deriving (Eq, Show)
 
 data Client
@@ -43,9 +47,12 @@ app = App
       , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
       , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
       ]
+    renderer cli | cli^.focusing == Item = return $ vBox
+      [ translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ renderCardWithIn (cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor) (cli^.focusing == Timeline) (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
+      ]
     renderer cli | cli^.focusing == Textarea = return $ vBox
       [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
-      , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)next plugin"
+      , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
       , vLimit 5 $ W.renderEditor (cli^.focusing == Textarea) (cli ^. textarea)
       ]
 
@@ -55,15 +62,19 @@ app = App
           Vty.EvKey (Vty.KChar 'q') [] -> halt cli
           Vty.EvKey (Vty.KChar 'x') [Vty.MMeta] -> continue $ cli & focusing .~ Minibuffer
           Vty.EvKey (Vty.KChar 'a') [Vty.MCtrl] -> continue $ cli & focusing .~ Textarea
+          Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item
           _ -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
         Minibuffer -> case evkey of
           Vty.EvKey (Vty.KChar 'g') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
+        Item -> case evkey of
+          Vty.EvKey _ _ -> continue $ cli & focusing .~ Timeline
+          _ -> continue cli
         Textarea -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
             liftIO (cli^.plugins^._2^?ix (cli^.plugins^._1)^._Just.to (flip updater (cli^.textarea^.to W.getEditContents)))
-            continue $ cli & focusing .~ Timeline
+            continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
       AppEvent card -> do
@@ -71,15 +82,19 @@ app = App
           timeline %= W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) card
 
           let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
-          when (sel ^. title == sentinel ^. title) $ timeline %= W.listMoveDown
+          when (sel ^. pluginOf == sentinel ^. pluginOf) $ timeline %= W.listMoveDown
       _ -> continue cli
 
     colorscheme =
-      [ ("inverted", Vty.black `on` Vty.white)
+      [ ("plugin-id", fg Vty.brightBlue)
+      , ("user-name", Vty.withStyle Vty.currentAttr Vty.bold)
+      , ("screen-name", fg Vty.red)
+      , (attrName "inverted" <> attrName "card-content", Vty.black `on` Vty.white)
+      , ("inverted", Vty.black `on` Vty.white)
       ]
 
 sentinel :: Card
-sentinel = Card "sys" "sentinel" "--- fetching new cards ---"
+sentinel = Card "sys/sentinel" "sentinel" "--- fetching new cards ---"
 
 defClient :: (Int,Int) -> Client
 defClient s =

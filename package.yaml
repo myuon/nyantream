@@ -1,5 +1,5 @@
 name:                nyantream
-version:             0.2.0.0
+version:             0.2.1.0
 #synopsis:
 #description:
 homepage:            https://github.com/myuon/nyantream#readme
@@ -26,6 +26,7 @@ dependencies:
   - twitter-conduit
   - twitter-types-lens
   - mtl
+  - text-zipper
 
 default-extensions:
   - LambdaCase

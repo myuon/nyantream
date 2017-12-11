@@ -3,13 +3,16 @@ module Types where
 
 import Brick
 import Brick.BChan
+import Brick.Markup
 import Control.Lens
 import qualified Data.Text as T
+import Data.Monoid
+import Data.Text.Markup
 
 data Card
   = Card
-  { _plugin :: T.Text
-  , _title :: T.Text
+  { _pluginOf :: T.Text
+  , _title :: Markup AttrName
   , _content :: T.Text
   }
 
@@ -25,8 +28,8 @@ txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
 
 renderCardWithIn :: Int -> Bool -> Card -> Widget n
 renderCardWithIn w selected card =
-  ((if selected then withAttr "inverted" else id) $ txt "[" <+> txt (card ^. plugin) <+> txt "] " <+> txt (card ^. title))
-  <=> txtWrapper w (card ^. content)
+  withAttr "plugin-id" (txt $ "[" `T.append` (card^.pluginOf) `T.append` "]") <+> txt " " <+> markup (card^.title)
+  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (card ^. content))
 
 data Plugin
   = Plugin
