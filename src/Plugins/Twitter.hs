@@ -75,6 +75,7 @@ twitter account
             aux = T.concat
               [ tw ^. statusFavorited ^. _Just . to (\b -> if b then "★" else "")
               , tw ^. statusRetweeted ^. _Just . to (\b -> if b then "🔃" else "")
+              , tw ^. statusInReplyToStatusId ^. _Just . to (const "▷")
               ]
 
     updater :: [T.Text] -> IO ()
