@@ -4,6 +4,8 @@ module Plugins.Gmail where
 
 import Brick.BChan
 import Brick.Markup ((@?))
+import Codec.MIME.Base64 (decodeToString)
+import Codec.Binary.UTF8.String (decodeString)
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Control.Concurrent (threadDelay)
@@ -11,7 +13,7 @@ import Data.Aeson
 import Data.Aeson.Lens
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as S8
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Network.OAuth.OAuth2 hiding (error)
 import Network.HTTP.Conduit
 import Network.Google.Gmail.Types
@@ -20,6 +22,13 @@ import URI.ByteString.QQ
 import Unsafe.Coerce (unsafeCoerce)
 import GHC.Word (Word64)
 import Types
+
+decodeMessage :: MessagePart -> String
+decodeMessage mp
+  | isJust (mp ^. mpBody) = mp ^. mpBody ^?! _Just ^. mpbData ^?! _Just ^. to S8.unpack ^. to (replace '-' '+') ^. to (replace '_' '/') ^. to decodeToString ^. to decodeString ^.. folded . filtered (/= '\r')
+  | otherwise = unlines $ fmap decodeMessage (mp ^. mpParts)
+  where
+    replace c c' xs = xs >>= \x -> if x == c then [c'] else [x]
 
 gmail :: T.Text -> Plugin
 gmail account
@@ -54,6 +63,7 @@ gmail account
 
     Right lmr <- getter @ListMessagesResponse [uri|https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=1|]
     Right m <- getter @Message ([uri|https://www.googleapis.com/gmail/v1/users/me/messages/|] & pathL <>~ (lmr ^. lmrMessages ^. to (!! 0) ^. mId ^?! _Just ^. to T.unpack ^. to S8.pack))
+
     go getter (m ^. mHistoryId ^?! _Just)
 
     where
@@ -61,7 +71,7 @@ gmail account
       renderMessage msg = Card
         pluginId
         ((msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject")
-        (msg ^. mSnippet ^?! _Just)
+        (msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack)
 
       go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()
       go getter hid = do
