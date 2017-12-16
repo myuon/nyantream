@@ -1,34 +1,35 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE Rank2Types #-}
 module Plugins.Gmail where
 
 import Brick.BChan
 import Brick.Markup ((@?))
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Control.Monad
 import Control.Concurrent (threadDelay)
-import Data.Aeson (Value)
+import Data.Aeson
 import Data.Aeson.Lens
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as S8
 import Data.Maybe (catMaybes)
-import Network.OAuth.OAuth2
+import Network.OAuth.OAuth2 hiding (error)
 import Network.HTTP.Conduit
+import Network.Google.Gmail.Types
 import URI.ByteString
 import URI.ByteString.QQ
-import Unsafe.Coerce
+import Unsafe.Coerce (unsafeCoerce)
+import GHC.Word (Word64)
 import Types
-
-mailGoogleScope = "https://mail.google.com/"
 
 gmail :: T.Text -> Plugin
 gmail account
   = Plugin
   { pluginId = pluginId
   , fetcher = fetcher
-  , updater = undefined
+  , updater = \_ -> error "not implemented"
   }
   where
-  pluginId = "gmail/" `T.append` account
+  pluginId = "gm/" `T.append` account
 
   buildOAuth :: IO OAuth2
   buildOAuth = do
@@ -47,25 +48,27 @@ gmail account
     value <- runAuth pluginId
     googleOAuth <- buildOAuth
     Right token <- fetchRefreshToken mgr googleOAuth (value ^. key "refresh_token" ^?! _Just)
-    let getter = authGetJSON @Value @Value mgr (accessToken token)
-    Right v <- getter [uri|https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=1|]
-    Right v <- getter ([uri|https://www.googleapis.com/gmail/v1/users/me/messages/|] & pathL <>~ (Just v ^. key "messages" ^. nth 0 ^. key "id" ^?! _Just ^. to S8.pack))
 
-    go getter (Just v ^. key "historyId" ^?! _Just)
+    let getter :: forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)
+        getter = authGetJSON @T.Text mgr (accessToken token)
+
+    Right lmr <- getter @ListMessagesResponse [uri|https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=1|]
+    Right m <- getter @Message ([uri|https://www.googleapis.com/gmail/v1/users/me/messages/|] & pathL <>~ (lmr ^. lmrMessages ^. to (!! 0) ^. mId ^?! _Just ^. to T.unpack ^. to S8.pack))
+    go getter (m ^. mHistoryId ^?! _Just)
 
     where
-      renderMessage :: Value -> Card
-      renderMessage v = Card
+      renderMessage :: Message -> Card
+      renderMessage msg = Card
         pluginId
-        ((Just v ^. key "payload" ^. key "headers" ^.. traverseArray . each . to (\v -> (v ^. key "name" ^?! _Just, v ^. key "value" ^?! _Just)) ^. to (lookup "Subject" :: [(T.Text,T.Text)] -> Maybe T.Text) ^?! _Just) @? "mail-subject")
-        (Just v ^. key "payload" ^. key "parts" ^.. traverseArray . asText ^. to catMaybes ^. to T.unlines)
+        ((msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject")
+        (msg ^. mSnippet ^?! _Just)
 
+      go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()
       go getter hid = do
-        Right v <- getter ([uri|https://www.googleapis.com/gmail/v1/users/me/history?historyTypes=messageAdded|] & queryL . queryPairsL <>~ [("startHistoryId", S8.pack hid)])
-        let ids = Just v ^. key "history" ^.. traverseArray . key "messagesAdded" ^.. each . traverseArray . key "id" . asText ^. to catMaybes :: [T.Text]
-        forM_ ids $ \mid -> do
-          Right v <- getter ([uri|https://www.googleapis.com/gmail/v1/users/me/messages/|] & pathL <>~ (S8.pack $ T.unpack mid))
-          writeBChan chan $ renderMessage v
+        Right lhr <- getter @ListHistoryResponse ([uri|https://www.googleapis.com/gmail/v1/users/me/history?historyTypes=messageAdded|] & queryL . queryPairsL <>~ [("startHistoryId", S8.pack $ show hid)])
+        forM_ (lhr ^. lhrHistory ^.. each . hMessagesAdded . each . hmaMessage ^. to catMaybes ^.. each . mId ^. to catMaybes) $ \mid -> do
+          Right msg <- getter @Message ([uri|https://www.googleapis.com/gmail/v1/users/me/messages/|] & pathL <>~ (S8.pack $ T.unpack mid))
+          writeBChan chan $ renderMessage msg
         threadDelay $ 1000 * 1000 * 60
-        go getter $ Just v ^. key "historyId" ^?! _Just
+        go getter $ lhr ^. lhrHistoryId ^?! _Just
 

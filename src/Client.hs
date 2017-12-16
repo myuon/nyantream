@@ -111,7 +111,9 @@ runClient :: [Plugin] -> IO ()
 runClient pls = do
   size <- Vty.displayBounds =<< Vty.outputForConfig =<< Vty.standardIOConfig
   chan <- newBChan 2
-  mapM_ (\p -> forkIO $ fetcher p chan) pls
+  forM_ pls $ \p -> do
+    forkIO $ fetcher p chan
+    print $ "[" `T.append` pluginId p `T.append` "] booted"
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)

@@ -32,12 +32,15 @@ dependencies:
   - hoauth2
   - http-conduit
   - uri-bytestring
+  - gogol-gmail
 
 default-extensions:
+  - Strict
   - LambdaCase
   - OverloadedStrings
   - TemplateHaskell
   - TypeApplications
+  - RecordWildCards
 
 library:
   source-dirs: src
