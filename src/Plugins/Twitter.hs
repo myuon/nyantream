@@ -12,7 +12,6 @@ import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
 import Data.Text.Markup
 import Data.Monoid
-import Web.Authenticate.OAuth as OA
 import Web.Twitter.Conduit hiding (lookup,url)
 import Web.Twitter.Types.Lens
 import Types

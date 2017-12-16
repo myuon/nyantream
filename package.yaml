@@ -1,5 +1,5 @@
 name:                nyantream
-version:             0.2.1.0
+version:             0.2.2.0
 #synopsis:
 #description:
 homepage:            https://github.com/myuon/nyantream#readme
@@ -19,7 +19,6 @@ dependencies:
   - vector
   - time
   - lens-datetime
-  - authenticate-oauth
   - bytestring
   - conduit
   - resourcet
@@ -27,11 +26,21 @@ dependencies:
   - twitter-types-lens
   - mtl
   - text-zipper
+  - aeson
+  - aeson-lens
+  - directory
+  - hoauth2
+  - http-conduit
+  - uri-bytestring
+  - gogol-gmail
 
 default-extensions:
+  - Strict
   - LambdaCase
   - OverloadedStrings
   - TemplateHaskell
+  - TypeApplications
+  - RecordWildCards
 
 library:
   source-dirs: src
