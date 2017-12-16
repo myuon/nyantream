@@ -19,7 +19,6 @@ dependencies:
   - vector
   - time
   - lens-datetime
-  - authenticate-oauth
   - bytestring
   - conduit
   - resourcet
@@ -27,11 +26,12 @@ dependencies:
   - twitter-types-lens
   - mtl
   - text-zipper
-  - gogol
-  - gogol-gmail
   - aeson
   - aeson-lens
   - directory
+  - hoauth2
+  - http-conduit
+  - uri-bytestring
 
 default-extensions:
   - LambdaCase
