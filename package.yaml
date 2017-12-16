@@ -27,11 +27,17 @@ dependencies:
   - twitter-types-lens
   - mtl
   - text-zipper
+  - gogol
+  - gogol-gmail
+  - aeson
+  - aeson-lens
+  - directory
 
 default-extensions:
   - LambdaCase
   - OverloadedStrings
   - TemplateHaskell
+  - TypeApplications
 
 library:
   source-dirs: src

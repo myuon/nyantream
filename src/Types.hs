@@ -5,9 +5,13 @@ import Brick
 import Brick.BChan
 import Brick.Markup
 import Control.Lens
+import Data.Aeson
+import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Monoid
 import Data.Text.Markup
+import System.Directory (createDirectoryIfMissing)
 
 data Card
   = Card
@@ -37,4 +41,10 @@ data Plugin
   , fetcher :: BChan Card -> IO ()
   , updater :: [T.Text] -> IO ()
   }
+
+runAuth :: T.Text -> IO (Maybe Value)
+runAuth pluginId = do
+  let path = "token/" ++ T.unpack pluginId
+--  createDirectoryIfMissing True path
+  decodeStrict <$> S8.readFile path
 
