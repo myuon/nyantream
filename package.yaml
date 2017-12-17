@@ -1,5 +1,5 @@
 name:                nyantream
-version:             0.2.2.1
+version:             0.2.2.2
 #synopsis:
 #description:
 homepage:            https://github.com/myuon/nyantream#readme
@@ -17,6 +17,7 @@ dependencies:
   - lens
   - text
   - vector
+  - containers
   - time
   - lens-datetime
   - bytestring

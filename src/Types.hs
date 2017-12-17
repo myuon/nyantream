@@ -9,21 +9,24 @@ import Data.Aeson
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Monoid
+import qualified Data.Map as M
+import Data.Monoid ((<>))
 import Data.Text.Markup
 import System.Directory (createDirectoryIfMissing)
 
 data Card
   = Card
   { _pluginOf :: T.Text
+  , _cardId :: T.Text
   , _title :: Markup AttrName
-  , _content :: T.Text
+  , _summary :: T.Text
+  , _content :: Maybe T.Text
   }
 
 makeLenses ''Card
 
 txtWrapper :: Int -> T.Text -> Widget n
-txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
+txtWrapper w tx = vBox $ fmap vBox $ fmap (fmap txt . reverse . T.foldl go []) $ T.lines tx where
   go :: [T.Text] -> Char -> [T.Text]
   go [] ch = [T.singleton ch]
   go (x:xs) ch
@@ -33,13 +36,19 @@ txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
 renderCardWithIn :: Int -> Bool -> Card -> Widget n
 renderCardWithIn w selected card =
   withAttr "plugin-id" (txt $ "[" `T.append` (card^.pluginOf) `T.append` "]") <+> txt " " <+> markup (card^.title)
-  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (card ^. content))
+  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (card ^. summary))
+
+renderDetailCardWithIn :: Int -> Bool -> Card -> Widget n
+renderDetailCardWithIn w selected card =
+  withAttr "plugin-id" (txt $ "[" `T.append` (card^.pluginOf) `T.append` "]") <+> txt " " <+> markup (card^.title)
+  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (maybe (card ^. summary) id (card ^. content)))
 
 data Plugin
   = Plugin
   { pluginId :: T.Text
   , fetcher :: BChan Card -> IO ()
   , updater :: [T.Text] -> IO ()
+  , keyRunner :: M.Map Char (Card -> IO ())
   }
 
 runAuth :: T.Text -> IO (Maybe Value)

@@ -13,6 +13,7 @@ import Control.Monad.IO.Class
 import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import qualified Data.Map as M
 import Data.Monoid
 import Data.Text.Zipper (clearZipper)
 
@@ -49,7 +50,7 @@ app = App
       ]
     renderer cli | cli^.focusing == Item = return $ vBox
       [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
-        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderCardWithIn w (cli^.focusing == Timeline) (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
+        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
       ]
     renderer cli | cli^.focusing == Textarea = return $ vBox
       [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
@@ -69,7 +70,11 @@ app = App
           Vty.EvKey (Vty.KChar 'g') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
         Item -> case evkey of
-          Vty.EvKey _ _ -> continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ curcard) >> continue cli
+            where
+              curcard = cli^.timeline^.to W.listSelectedElement^?!_Just^._2
+              krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.pluginOf)) ^. to head ^. to keyRunner
           _ -> continue cli
         Textarea -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
@@ -95,7 +100,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card "sys/sentinel" "sentinel" "--- fetching new cards ---"
+sentinel = Card "sys/sentinel" "" "sentinel" "--- fetching new cards ---" Nothing
 
 defClient :: (Int,Int) -> Client
 defClient s =
@@ -113,7 +118,7 @@ runClient pls = do
   chan <- newBChan 2
   forM_ pls $ \p -> do
     forkIO $ fetcher p chan
-    print $ "[" `T.append` pluginId p `T.append` "] booted"
+    putStrLn $ T.unpack $ "[" `T.append` pluginId p `T.append` "] booted"
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)
