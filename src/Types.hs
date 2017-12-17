@@ -9,13 +9,15 @@ import Data.Aeson
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Monoid
+import qualified Data.Map as M
+import Data.Monoid ((<>))
 import Data.Text.Markup
 import System.Directory (createDirectoryIfMissing)
 
 data Card
   = Card
   { _pluginOf :: T.Text
+  , _cardId :: T.Text
   , _title :: Markup AttrName
   , _summary :: T.Text
   , _content :: Maybe T.Text
@@ -46,6 +48,7 @@ data Plugin
   { pluginId :: T.Text
   , fetcher :: BChan Card -> IO ()
   , updater :: [T.Text] -> IO ()
+  , keyRunner :: M.Map Char (Card -> IO ())
   }
 
 runAuth :: T.Text -> IO (Maybe Value)

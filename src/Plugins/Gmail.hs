@@ -13,6 +13,7 @@ import Data.Aeson
 import Data.Aeson.Lens
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as S8
+import qualified Data.Map as M
 import Data.Maybe (catMaybes, isJust)
 import Network.OAuth.OAuth2 hiding (error)
 import Network.HTTP.Conduit
@@ -36,6 +37,7 @@ gmail account
   { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> error "not implemented"
+  , keyRunner = M.empty
   }
   where
   pluginId = "gm/" `T.append` account
@@ -70,6 +72,7 @@ gmail account
       renderMessage :: Message -> Card
       renderMessage msg = Card
         pluginId
+        (msg ^. mId ^?! _Just)
         ((msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject")
         (msg ^. mSnippet ^?! _Just)
         (Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack)

@@ -10,6 +10,7 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as C
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.Text as T
+import qualified Data.Map as M
 import Data.Text.Markup
 import Data.Monoid
 import Web.Twitter.Conduit hiding (lookup,url)
@@ -35,9 +36,17 @@ twitter account
   { pluginId = twplugin
   , fetcher = fetcher
   , updater = updater
+  , keyRunner = M.fromList [('f', favo)]
   }
 
   where
+    favo :: Card -> IO ()
+    favo c = do
+      twInfo <- getTWInfo account
+      manager <- newManager tlsManagerSettings
+      call twInfo manager $ favoritesCreate (c ^. cardId ^. to T.unpack ^. to read)
+      return ()
+
     twplugin = "tw/" `T.append` account
 
     fetcher :: BChan Card -> IO ()
@@ -67,6 +76,7 @@ twitter account
         renderStatus account tw
           = Card
             twplugin
+            (tw ^. statusId ^. to show ^. to T.pack)
             (mconcat
              [ maysurround "(" (")" ^. space_end) aux @? "aux"
              , (tw ^. user ^. name ^. space_end) @? "user-name"

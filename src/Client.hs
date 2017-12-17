@@ -13,6 +13,7 @@ import Control.Monad.IO.Class
 import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import qualified Data.Map as M
 import Data.Monoid
 import Data.Text.Zipper (clearZipper)
 
@@ -69,7 +70,11 @@ app = App
           Vty.EvKey (Vty.KChar 'g') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
         Item -> case evkey of
-          Vty.EvKey _ _ -> continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ curcard) >> continue cli
+            where
+              curcard = cli^.timeline^.to W.listSelectedElement^?!_Just^._2
+              krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.pluginOf)) ^. to head ^. to keyRunner
           _ -> continue cli
         Textarea -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
@@ -95,7 +100,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card "sys/sentinel" "sentinel" "--- fetching new cards ---" Nothing
+sentinel = Card "sys/sentinel" "" "sentinel" "--- fetching new cards ---" Nothing
 
 defClient :: (Int,Int) -> Client
 defClient s =

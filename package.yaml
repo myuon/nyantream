@@ -17,6 +17,7 @@ dependencies:
   - lens
   - text
   - vector
+  - containers
   - time
   - lens-datetime
   - bytestring
