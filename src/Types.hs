@@ -24,7 +24,7 @@ data Card
 makeLenses ''Card
 
 txtWrapper :: Int -> T.Text -> Widget n
-txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
+txtWrapper w tx = vBox $ fmap vBox $ fmap (fmap txt . reverse . T.foldl go []) $ T.lines tx where
   go :: [T.Text] -> Char -> [T.Text]
   go [] ch = [T.singleton ch]
   go (x:xs) ch

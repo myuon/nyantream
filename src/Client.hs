@@ -113,7 +113,7 @@ runClient pls = do
   chan <- newBChan 2
   forM_ pls $ \p -> do
     forkIO $ fetcher p chan
-    print $ "[" `T.append` pluginId p `T.append` "] booted"
+    putStrLn $ T.unpack $ "[" `T.append` pluginId p `T.append` "] booted"
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)

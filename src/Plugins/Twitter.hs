@@ -73,7 +73,16 @@ twitter account
              , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
              ])
             (tw ^. text)
-            Nothing
+            (Just $ T.unlines $ filter (/= "") $
+            [ tw ^. text
+            , "------------"
+            , (tw ^. statusCreatedAt ^. to show ^. to T.pack)
+            , "★" `T.append` (tw ^. statusFavoriteCount ^. to show ^. to T.pack) `T.append` "  " `T.append` "🔃" `T.append` (tw ^. statusRetweetCount ^. to show ^. to T.pack)
+            , maybe "" (\e -> e ^. enHashTags ^.. each . entityBody . hashTagText . to ("#" `T.append`) ^. to T.unwords) (tw ^. statusEntities)
+            , maybe "" (\e -> e ^. enMedia ^.. each . entityBody . to (\m -> (m ^. meType) `T.append` ":" `T.append` (m ^. meMediaURL)) ^. to T.unlines) (tw ^. statusEntities)
+            , maybe "" (\e -> e ^. enURLs ^.. each . entityBody . ueExpanded ^. to T.unlines) (tw ^. statusEntities)
+            ]
+            )
 
           where
             maysurround st ed xs = if T.null xs then "" else st `T.append` xs `T.append` ed
