@@ -73,6 +73,7 @@ twitter account
              , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
              ])
             (tw ^. text)
+            Nothing
 
           where
             maysurround st ed xs = if T.null xs then "" else st `T.append` xs `T.append` ed

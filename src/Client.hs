@@ -49,7 +49,7 @@ app = App
       ]
     renderer cli | cli^.focusing == Item = return $ vBox
       [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
-        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderCardWithIn w (cli^.focusing == Timeline) (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
+        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
       ]
     renderer cli | cli^.focusing == Textarea = return $ vBox
       [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
@@ -95,7 +95,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card "sys/sentinel" "sentinel" "--- fetching new cards ---"
+sentinel = Card "sys/sentinel" "sentinel" "--- fetching new cards ---" Nothing
 
 defClient :: (Int,Int) -> Client
 defClient s =

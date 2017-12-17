@@ -17,7 +17,8 @@ data Card
   = Card
   { _pluginOf :: T.Text
   , _title :: Markup AttrName
-  , _content :: T.Text
+  , _summary :: T.Text
+  , _content :: Maybe T.Text
   }
 
 makeLenses ''Card
@@ -33,7 +34,12 @@ txtWrapper w tx = vBox $ fmap txt $ reverse $ T.foldl go [] tx where
 renderCardWithIn :: Int -> Bool -> Card -> Widget n
 renderCardWithIn w selected card =
   withAttr "plugin-id" (txt $ "[" `T.append` (card^.pluginOf) `T.append` "]") <+> txt " " <+> markup (card^.title)
-  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (card ^. content))
+  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (card ^. summary))
+
+renderDetailCardWithIn :: Int -> Bool -> Card -> Widget n
+renderDetailCardWithIn w selected card =
+  withAttr "plugin-id" (txt $ "[" `T.append` (card^.pluginOf) `T.append` "]") <+> txt " " <+> markup (card^.title)
+  <=> withAttr ((if selected then ("inverted" <>) else id) "card-content") (padRight Max $ txtWrapper w (maybe (card ^. summary) id (card ^. content)))
 
 data Plugin
   = Plugin

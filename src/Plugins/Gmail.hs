@@ -71,7 +71,8 @@ gmail account
       renderMessage msg = Card
         pluginId
         ((msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject")
-        (msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack)
+        (msg ^. mSnippet ^?! _Just)
+        (Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack)
 
       go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()
       go getter hid = do
