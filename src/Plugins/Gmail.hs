@@ -41,7 +41,7 @@ gmail account
   , keyRunner = M.empty
   }
   where
-  pluginId = "gm/" `T.append` account
+  pluginId = PluginId "gm" account
 
   buildOAuth :: IO OAuth2
   buildOAuth = do
@@ -73,8 +73,7 @@ gmail account
       renderMessage :: Message -> Card
       renderMessage msg
         = Card
-        { _pluginOf = pluginId
-        , _cardId = msg ^. mId ^?! _Just
+        { _cardId = CardId pluginId $ msg ^. mId ^?! _Just
         , _speaker = msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "From") ^?! _Just
         , _title = (msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject"
         , _summary = msg ^. mSnippet ^?! _Just

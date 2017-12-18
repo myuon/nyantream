@@ -64,12 +64,12 @@ app = App
         ]
       Compose -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) False (cli ^. timeline)
-        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
+        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^?! _Just ^. to pluginId ^. to textPluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
         , vLimit 5 $ W.renderEditor (cli^.focusing == Compose) (cli ^. textarea)
         ]
       ReplyTo tx -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 7) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) False (cli ^. timeline)
-        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *reply* (C-c)send (C-q)quit (C-n)switch"
+        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^?! _Just ^. to pluginId ^. to textPluginId) `T.append` "] *reply* (C-c)send (C-q)quit (C-n)switch"
         , withAttr "inverted" $ padRight Max $ txt tx
         , vLimit 5 $ W.renderEditor True (cli ^. textarea)
         ]
@@ -98,7 +98,7 @@ app = App
           Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ curcard) >> continue cli
             where
               curcard = cli^.cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
-              krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.pluginOf)) ^. to head ^. to keyRunner
+              krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.cardId^._CardId^._1)) ^. to head ^. to keyRunner
           _ -> continue cli
         Compose -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
@@ -125,7 +125,7 @@ app = App
             notification %= W.listMoveDown
 
           let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
-          when (cli ^. cardix sel ^. pluginOf == sentinel ^. pluginOf) $ timeline %= W.listMoveDown
+          when (cli ^. cardix sel ^. cardId == sentinel ^. cardId) $ timeline %= W.listMoveDown
       _ -> continue cli
 
     colorscheme =
@@ -137,7 +137,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card "sys/sentinel" "" "" "sentinel" "--- fetching new cards ---" Nothing []
+sentinel = Card (CardId (PluginId "sys" "sentinel") "*") "" "sentinel" "--- fetching new cards ---" Nothing []
 
 defClient :: (Int,Int) -> Client
 defClient s =
@@ -155,9 +155,7 @@ runClient :: [Plugin] -> IO ()
 runClient pls = do
   size <- Vty.displayBounds =<< Vty.outputForConfig =<< Vty.standardIOConfig
   chan <- newBChan 2
-  forM_ pls $ \p -> do
-    forkIO $ fetcher p chan
-    putStrLn $ T.unpack $ "[" `T.append` pluginId p `T.append` "] booted"
+  forM_ pls $ \p -> forkIO $ fetcher p chan
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)

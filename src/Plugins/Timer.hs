@@ -15,7 +15,7 @@ import Types
 hscheduler :: Plugin
 hscheduler
   = Plugin
-  { pluginId = "hscheduler"
+  { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> return ()
   , replyTo = \_ -> Nothing
@@ -23,11 +23,12 @@ hscheduler
   }
 
   where
+    pluginId = PluginId "hschedular" ""
+
     renderTimer :: T.Text -> Card
     renderTimer content
       = Card
-      { _pluginOf = "tm"
-      , _cardId = ""
+      { _cardId = CardId pluginId ""
       , _speaker = ""
       , _title = "timer"
       , _summary = content

@@ -57,23 +57,23 @@ twitter account
           [ "reply to: "
           , card^.speaker
           , " {"
-          , card^.cardId
+          , card^.cardId^._CardId^._2
           , "}"
           ]
         replyUpdater msg = do
           twInfo <- getTWInfo account
           manager <- newManager tlsManagerSettings
-          call twInfo manager $ update (T.unlines msg) & inReplyToStatusId ?~ card^.cardId^.to T.unpack^.to read
+          call twInfo manager $ update (T.unlines msg) & inReplyToStatusId ?~ card^.cardId^._CardId^._2^.to T.unpack^.to read
           return ()
 
     favo :: Card -> IO ()
     favo c = do
       twInfo <- getTWInfo account
       manager <- newManager tlsManagerSettings
-      call twInfo manager $ favoritesCreate (c ^. cardId ^. to T.unpack ^. to read)
+      call twInfo manager $ favoritesCreate (c^.cardId^._CardId^._2^.to T.unpack^.to read)
       return ()
 
-    twplugin = "tw/" `T.append` account
+    twplugin = PluginId "tw" account
 
     fetcher :: BChan Card -> IO ()
     fetcher chan = do
@@ -106,11 +106,10 @@ twitter account
         renderStatus :: T.Text -> Status -> Bool -> Card
         renderStatus account tw notify
           = Card
-          { _pluginOf = twplugin
-          , _cardId = tw ^. statusId ^. to show ^. to T.pack
+          { _cardId = CardId twplugin $ tw ^. statusId ^. to show ^. to T.pack
           , _speaker = tw ^. user ^. screen_name
           , _title = mconcat
-            [ maysurround "(" (")" ^. space_end) aux @? "aux"
+            [ aux @? "aux"
             , (tw ^. user ^. name ^. space_end) @? "user-name"
             , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
             ]
@@ -133,7 +132,7 @@ twitter account
             aux = T.concat
               [ tw ^. statusFavorited ^. _Just . to (\b -> if b then "★" else "")
               , tw ^. statusRetweeted ^. _Just . to (\b -> if b then "🔃" else "")
-              , tw ^. statusInReplyToStatusId ^. _Just . to (const "▷")
+              , tw ^. statusInReplyToStatusId ^. _Just . to (const "▷ ")
               ]
 
     updater :: [T.Text] -> IO ()
