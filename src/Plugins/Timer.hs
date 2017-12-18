@@ -15,24 +15,31 @@ import Types
 hscheduler :: Plugin
 hscheduler
   = Plugin
-  { pluginId = "hscheduler"
+  { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> return ()
+  , replyTo = \_ -> Nothing
   , keyRunner = M.empty
   }
 
   where
+    pluginId = PluginId "hschedular" ""
+
+    renderTimer :: T.Text -> Card
+    renderTimer content
+      = Card
+      { _cardId = CardId pluginId ""
+      , _speaker = ""
+      , _title = "timer"
+      , _summary = content
+      , _content = Nothing
+      , _label = []
+      }
+
     fetcher chan = forever $ do
       cur <- getZonedTime
       let next = cur & flexDT . hours +~ 1 & flexDT . minutes .~ 0 & flexDT . seconds .~ 0
-      writeBChan chan $ Card "tm" "" "timer" (T.pack $ "current time: " ++ show cur ++ "\nnext: " ++ show next) Nothing
-      threadDelay $ fromInteger $ (`div` (1000 * 1000)) $ diffTimeToPicoseconds $ (next ^. timeAsDiff - cur ^. timeAsDiff)
-      go
-
-      where
-        go = do
-          cur <- getZonedTime
-          writeBChan chan $ Card "tm" "" "timer" (T.pack $ "current time: " ++ show cur) Nothing
-          threadDelay $ 1000 * 1000 * 60 * 60
-
+      writeBChan chan $ renderTimer (T.pack $ "current time: " ++ show cur ++ "\nnext: " ++ show next)
+      let n = fromInteger $ (`div` (1000 * 1000)) $ diffTimeToPicoseconds $ ((if (next ^. timeAsDiff == 0) then 60 * 60 * 24 else next ^. timeAsDiff) - cur ^. timeAsDiff)
+      threadDelay n
 

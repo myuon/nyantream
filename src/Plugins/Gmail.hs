@@ -37,10 +37,11 @@ gmail account
   { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> error "not implemented"
+  , replyTo = \_ -> Nothing
   , keyRunner = M.empty
   }
   where
-  pluginId = "gm/" `T.append` account
+  pluginId = PluginId "gm" account
 
   buildOAuth :: IO OAuth2
   buildOAuth = do
@@ -70,12 +71,15 @@ gmail account
 
     where
       renderMessage :: Message -> Card
-      renderMessage msg = Card
-        pluginId
-        (msg ^. mId ^?! _Just)
-        ((msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject")
-        (msg ^. mSnippet ^?! _Just)
-        (Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack)
+      renderMessage msg
+        = Card
+        { _cardId = CardId pluginId $ msg ^. mId ^?! _Just
+        , _speaker = msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "From") ^?! _Just
+        , _title = (msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject"
+        , _summary = msg ^. mSnippet ^?! _Just
+        , _content = Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack
+        , _label = if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else []
+        }
 
       go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()
       go getter hid = do
