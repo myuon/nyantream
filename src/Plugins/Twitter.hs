@@ -36,10 +36,36 @@ twitter account
   { pluginId = twplugin
   , fetcher = fetcher
   , updater = updater
+  , replyTo = replyTo
   , keyRunner = M.fromList [('f', favo)]
   }
 
   where
+    at_ = to $ \x -> "@" `T.append` x
+    space_end = to $ \x -> x `T.append` " "
+
+    replyTo :: Card -> Maybe ReplyInfo
+    replyTo card = Just
+      (ReplyInfo
+        { placeholder = card^.speaker^.at_^.space_end
+        , description = rtext
+        , replyUpdater = replyUpdater
+        })
+
+      where
+        rtext = mconcat
+          [ "reply to: "
+          , card^.speaker
+          , " {"
+          , card^.cardId
+          , "}"
+          ]
+        replyUpdater msg = do
+          twInfo <- getTWInfo account
+          manager <- newManager tlsManagerSettings
+          call twInfo manager $ update (T.unlines msg) & inReplyToStatusId ?~ card^.cardId^.to T.unpack^.to read
+          return ()
+
     favo :: Card -> IO ()
     favo c = do
       twInfo <- getTWInfo account
@@ -58,9 +84,6 @@ twitter account
         src C.$$+- C.mapM_ (lift . fromStream chan)
 
       where
-        at_ = to $ \x -> "@" `T.append` x
-        space_end = to $ \x -> x `T.append` " "
-
         fromStream :: BChan Card -> StreamingAPI -> IO ()
         fromStream chan api = case api of
           SStatus tw -> writeBChan chan $ renderStatus account tw (shouldNotify api)
@@ -83,15 +106,16 @@ twitter account
         renderStatus :: T.Text -> Status -> Bool -> Card
         renderStatus account tw notify
           = Card
-            twplugin
-            (tw ^. statusId ^. to show ^. to T.pack)
-            (mconcat
-             [ maysurround "(" (")" ^. space_end) aux @? "aux"
-             , (tw ^. user ^. name ^. space_end) @? "user-name"
-             , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
-             ])
-            (tw ^. text)
-            (Just $ T.unlines $ filter (/= "") $
+          { _pluginOf = twplugin
+          , _cardId = tw ^. statusId ^. to show ^. to T.pack
+          , _speaker = tw ^. user ^. screen_name
+          , _title = mconcat
+            [ maysurround "(" (")" ^. space_end) aux @? "aux"
+            , (tw ^. user ^. name ^. space_end) @? "user-name"
+            , (tw ^. user ^. screen_name ^. at_ ^. space_end) @? "screen-name"
+            ]
+          , _summary = tw ^. text
+          , _content = Just $ T.unlines $ filter (/= "") $
             [ tw ^. text
             , "------------"
             , (tw ^. statusCreatedAt ^. to show ^. to T.pack)
@@ -99,8 +123,9 @@ twitter account
             , maybe "" (\e -> e ^. enHashTags ^.. each . entityBody . hashTagText . to ("#" `T.append`) ^. to T.unwords) (tw ^. statusEntities)
             , maybe "" (\e -> e ^. enMedia ^.. each . entityBody . to (\m -> (m ^. meType) `T.append` ":" `T.append` (m ^. meMediaURL)) ^. to T.unlines) (tw ^. statusEntities)
             , maybe "" (\e -> e ^. enURLs ^.. each . entityBody . ueExpanded ^. to T.unlines) (tw ^. statusEntities)
-            ])
-            (if notify then ["notify"] else [])
+            ]
+          , _label = if notify then ["notify"] else []
+          }
 
           where
             maysurround st ed xs = if T.null xs then "" else st `T.append` xs `T.append` ed

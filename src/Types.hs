@@ -18,6 +18,7 @@ data Card
   = Card
   { _pluginOf :: T.Text
   , _cardId :: T.Text
+  , _speaker :: T.Text
   , _title :: Markup AttrName
   , _summary :: T.Text
   , _content :: Maybe T.Text
@@ -49,7 +50,15 @@ data Plugin
   { pluginId :: T.Text
   , fetcher :: BChan Card -> IO ()
   , updater :: [T.Text] -> IO ()
+  , replyTo :: Card -> Maybe ReplyInfo
   , keyRunner :: M.Map Char (Card -> IO ())
+  }
+
+data ReplyInfo
+  = ReplyInfo
+  { placeholder :: T.Text
+  , description :: T.Text
+  , replyUpdater :: [T.Text] -> IO ()
   }
 
 runAuth :: T.Text -> IO (Maybe Value)

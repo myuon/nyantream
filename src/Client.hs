@@ -17,12 +17,16 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Monoid
-import Data.Text.Zipper (clearZipper)
+import Data.Text.Zipper (clearZipper, textZipper)
 import Data.Unique
 
 import Types
 
-data FocusOn = Timeline | Notification | Minibuffer | Textarea | Item
+data FocusOn
+  = Timeline | Notification
+  | Minibuffer
+  | Compose | ReplyTo T.Text
+  | Item
   deriving (Eq, Show)
 
 data Client
@@ -48,27 +52,41 @@ app = App
   (\_ -> attrMap (fg Vty.white) colorscheme)
 
   where
-    renderer cli | cli^.focusing `elem` [Timeline, Notification, Minibuffer] = return $ vBox
-      [ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b (cli ^. cardix n)) (cli^.focusing == Timeline) (if (cli^.focusing == Notification) then cli ^. notification else cli ^. timeline)
-      , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
-      , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
-      ]
-    renderer cli | cli^.focusing == Item = return $ vBox
-      [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
-        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli ^. cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2))
-      ]
-    renderer cli | cli^.focusing == Textarea = return $ vBox
-      [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) (cli^.focusing == Timeline) (cli ^. timeline)
-      , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
-      , vLimit 5 $ W.renderEditor (cli^.focusing == Textarea) (cli ^. textarea)
-      ]
+    renderer cli = case cli^.focusing of
+      st | st `elem` [Timeline, Notification, Minibuffer] -> return $ vBox
+        [ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b (cli ^. cardix n)) (cli^.focusing == Timeline) (if (cli^.focusing == Notification) then cli ^. notification else cli ^. timeline)
+        , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
+        , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
+        ]
+      Item -> return $ vBox
+        [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
+          translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli ^. cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2))
+        ]
+      Compose -> return $ vBox
+        [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) False (cli ^. timeline)
+        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
+        , vLimit 5 $ W.renderEditor (cli^.focusing == Compose) (cli ^. textarea)
+        ]
+      ReplyTo tx -> return $ vBox
+        [ vLimit (cli ^. size ^. _2 - 7) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) False (cli ^. timeline)
+        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *reply* (C-c)send (C-q)quit (C-n)switch"
+        , withAttr "inverted" $ padRight Max $ txt tx
+        , vLimit 5 $ W.renderEditor True (cli ^. textarea)
+        ]
 
     evhandler cli = \case
       VtyEvent evkey -> case cli^.focusing of
         Timeline -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [] -> halt cli
           Vty.EvKey (Vty.KChar 'x') [Vty.MMeta] -> continue $ cli & focusing .~ Minibuffer
-          Vty.EvKey (Vty.KChar 'a') [Vty.MCtrl] -> continue $ cli & focusing .~ Textarea
+          Vty.EvKey (Vty.KChar 'a') [Vty.MCtrl] -> continue $ cli & focusing .~ Compose
+          Vty.EvKey (Vty.KChar 'a') [Vty.MMeta] -> do
+            let sel = cli^.cardix(cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
+            case cli^.plugins^._2^?!ix (cli^.plugins^._1)^.to (flip replyTo sel) of
+              Just rinfo -> continue $ cli
+                & textarea . W.editContentsL .~ textZipper [placeholder rinfo] Nothing
+                & focusing .~ ReplyTo (description rinfo)
+              Nothing -> continue cli
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Notification
           Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item
           _ -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
@@ -82,12 +100,20 @@ app = App
               curcard = cli^.cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
               krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.pluginOf)) ^. to head ^. to keyRunner
           _ -> continue cli
-        Textarea -> case evkey of
+        Compose -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
             liftIO (cli^.plugins^._2^?ix (cli^.plugins^._1)^._Just.to (flip updater (cli^.textarea^.to W.getEditContents)))
             continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
+          _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
+        ReplyTo _ -> case evkey of
+          Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
+          Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
+            let sel = cli^.cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
+            let Just rinfo = cli^.plugins^._2^?!ix (cli^.plugins^._1)^.to (flip replyTo sel)
+            liftIO $ replyUpdater rinfo (cli^.textarea^.to W.getEditContents)
+            continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
         Notification -> case evkey of
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
@@ -111,7 +137,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card "sys/sentinel" "" "sentinel" "--- fetching new cards ---" Nothing []
+sentinel = Card "sys/sentinel" "" "" "sentinel" "--- fetching new cards ---" Nothing []
 
 defClient :: (Int,Int) -> Client
 defClient s =
