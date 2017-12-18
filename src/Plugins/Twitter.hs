@@ -62,18 +62,26 @@ twitter account
         space_end = to $ \x -> x `T.append` " "
 
         fromStream :: BChan Card -> StreamingAPI -> IO ()
-        fromStream chan = \case
-          SStatus tw -> writeBChan chan $ renderStatus account tw
-          SRetweetedStatus rtw -> writeBChan chan $ renderStatus account (rtw^.rsRetweetedStatus)
+        fromStream chan api = case api of
+          SStatus tw -> writeBChan chan $ renderStatus account tw (shouldNotify api)
+          SRetweetedStatus rtw -> writeBChan chan $ renderStatus account (rtw^.rsRetweetedStatus) (shouldNotify api)
             & title %~ (((rtw^.rsUser^.screen_name^.at_) @? "screen-name" <> " retweeted ") <>)
           SEvent ev | ev ^. evEvent == "favorite" -> case (ev^.evSource, ev^.evTargetObject) of
-            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ renderStatus account s
+            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ renderStatus account s (shouldNotify api)
               & title %~ (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>)
             _ -> return ()
           _ -> return ()
 
-        renderStatus :: T.Text -> Status -> Card
-        renderStatus account tw
+        shouldNotify :: StreamingAPI -> Bool
+        shouldNotify = \case
+          SStatus tw -> tw ^. statusInReplyToScreenName == Just account
+          SRetweetedStatus rtw -> rtw ^. rsRetweetedStatus ^. user ^. screen_name == account
+          SEvent ev | ev ^. evEvent == "favorite" -> case (ev^.evSource, ev^.evTargetObject) of
+            (ETUser u, Just (ETStatus s)) -> s ^. user ^. screen_name == account
+          _ -> False
+
+        renderStatus :: T.Text -> Status -> Bool -> Card
+        renderStatus account tw notify
           = Card
             twplugin
             (tw ^. statusId ^. to show ^. to T.pack)
@@ -91,8 +99,8 @@ twitter account
             , maybe "" (\e -> e ^. enHashTags ^.. each . entityBody . hashTagText . to ("#" `T.append`) ^. to T.unwords) (tw ^. statusEntities)
             , maybe "" (\e -> e ^. enMedia ^.. each . entityBody . to (\m -> (m ^. meType) `T.append` ":" `T.append` (m ^. meMediaURL)) ^. to T.unlines) (tw ^. statusEntities)
             , maybe "" (\e -> e ^. enURLs ^.. each . entityBody . ueExpanded ^. to T.unlines) (tw ^. statusEntities)
-            ]
-            )
+            ])
+            (if notify then ["notify"] else [])
 
           where
             maysurround st ed xs = if T.null xs then "" else st `T.append` xs `T.append` ed

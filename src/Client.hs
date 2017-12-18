@@ -22,7 +22,7 @@ import Data.Unique
 
 import Types
 
-data FocusOn = Timeline | Minibuffer | Textarea | Item
+data FocusOn = Timeline | Notification | Minibuffer | Textarea | Item
   deriving (Eq, Show)
 
 data Client
@@ -30,6 +30,7 @@ data Client
   { _size :: (Int,Int)
   , _focusing :: FocusOn
   , _timeline :: W.List T.Text Int
+  , _notification :: W.List T.Text Int
   , _minibuffer :: W.Editor T.Text T.Text
   , _textarea :: W.Editor T.Text T.Text
   , _plugins :: (Int, [Plugin])
@@ -47,8 +48,8 @@ app = App
   (\_ -> attrMap (fg Vty.white) colorscheme)
 
   where
-    renderer cli | cli^.focusing `elem` [Timeline, Minibuffer] = return $ vBox
-      [ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b (cli ^. cardix n)) (cli^.focusing == Timeline) (cli ^. timeline)
+    renderer cli | cli^.focusing `elem` [Timeline, Notification, Minibuffer] = return $ vBox
+      [ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b (cli ^. cardix n)) (cli^.focusing == Timeline) (if (cli^.focusing == Notification) then cli ^. notification else cli ^. timeline)
       , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
       , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
       ]
@@ -68,6 +69,7 @@ app = App
           Vty.EvKey (Vty.KChar 'q') [] -> halt cli
           Vty.EvKey (Vty.KChar 'x') [Vty.MMeta] -> continue $ cli & focusing .~ Minibuffer
           Vty.EvKey (Vty.KChar 'a') [Vty.MCtrl] -> continue $ cli & focusing .~ Textarea
+          Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Notification
           Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item
           _ -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
         Minibuffer -> case evkey of
@@ -87,8 +89,15 @@ app = App
             continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
+        Notification -> case evkey of
+          Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
+          _ -> handleEventLensed cli notification W.handleListEvent evkey >>= continue
       AppEvent card -> do
-        (continue =<<) $ newCardTL card cli <&> \cli -> cli &~ do
+        (continue =<<) $ newCardTL card cli <&> \(n,cli) -> cli &~ do
+          when ("notify" `elem` card ^. label) $ do
+            notification %= W.listInsert (cli ^. notification ^. W.listElementsL ^. to length) n
+            notification %= W.listMoveDown
+
           let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
           when (cli ^. cardix sel ^. pluginOf == sentinel ^. pluginOf) $ timeline %= W.listMoveDown
       _ -> continue cli
@@ -102,7 +111,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card "sys/sentinel" "" "sentinel" "--- fetching new cards ---" Nothing
+sentinel = Card "sys/sentinel" "" "sentinel" "--- fetching new cards ---" Nothing []
 
 defClient :: (Int,Int) -> Client
 defClient s =
@@ -110,6 +119,7 @@ defClient s =
     s
     Timeline
     (W.list "timeline" V.empty 2)
+    (W.list "notification" V.empty 2)
     (W.editorText "minibuffer" (txt . T.unlines) (Just 1) "")
     (W.editorText "textarea" (txt . T.unlines) (Just 5) "")
     (0,[])
@@ -127,14 +137,17 @@ runClient pls = do
     (Vty.standardIOConfig >>= Vty.mkVty)
     (Just chan)
     app
-    =<< (defClient size & plugins .~ (0,pls) & newCardTL sentinel)
+    =<< (defClient size & plugins .~ (0,pls) & newCardTL_ sentinel)
 
   return ()
 
-newCardTL :: MonadIO m => Card -> Client -> m Client
+newCardTL :: MonadIO m => Card -> Client -> m (Int,Client)
 newCardTL card cli = liftIO $ do
   n <- hashUnique <$> newUnique
-  return $ cli & cardpool %~ IM.insert n card & timeline %~ W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) n
+  return $ (,) n $ cli & cardpool %~ IM.insert n card & timeline %~ W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) n
+
+newCardTL_ :: MonadIO m => Card -> Client -> m Client
+newCardTL_ card cli = snd <$> newCardTL card cli
 
 cardix :: Int -> Getter Client Card
 cardix n = to $ \c -> c ^. cardpool ^. to (IM.! n)

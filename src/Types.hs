@@ -21,6 +21,7 @@ data Card
   , _title :: Markup AttrName
   , _summary :: T.Text
   , _content :: Maybe T.Text
+  , _label :: [T.Text]
   }
 
 makeLenses ''Card

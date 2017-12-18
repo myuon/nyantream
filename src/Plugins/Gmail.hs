@@ -76,6 +76,7 @@ gmail account
         ((msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject")
         (msg ^. mSnippet ^?! _Just)
         (Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack)
+        (if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else [])
 
       go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()
       go getter hid = do
