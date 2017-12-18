@@ -41,7 +41,9 @@ txtWrapper w tx = vBox $ fmap vBox $ fmap (fmap txt . reverse . T.foldl go []) $
     | otherwise = T.snoc x ch:xs
 
 textPluginId :: PluginId -> T.Text
-textPluginId (PluginId x y) = x `T.append` "/" `T.append` y
+textPluginId (PluginId x y)
+  | y == "" = x
+  | otherwise = x `T.append` "/" `T.append` y
 
 renderCardWithIn :: Int -> Bool -> Card -> Widget n
 renderCardWithIn w selected card =
