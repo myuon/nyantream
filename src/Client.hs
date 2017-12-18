@@ -1,3 +1,4 @@
+{-# LANGUAGE Rank2Types #-}
 module Client where
 
 import Brick
@@ -14,8 +15,10 @@ import Control.Concurrent
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import Data.Monoid
 import Data.Text.Zipper (clearZipper)
+import Data.Unique
 
 import Types
 
@@ -26,15 +29,16 @@ data Client
   = Client
   { _size :: (Int,Int)
   , _focusing :: FocusOn
-  , _timeline :: W.List String Card
-  , _minibuffer :: W.Editor T.Text String
-  , _textarea :: W.Editor T.Text String
+  , _timeline :: W.List T.Text Int
+  , _minibuffer :: W.Editor T.Text T.Text
+  , _textarea :: W.Editor T.Text T.Text
   , _plugins :: (Int, [Plugin])
+  , _cardpool :: IM.IntMap Card
   }
 
 makeLenses ''Client
 
-app :: App Client Card String
+app :: App Client Card T.Text
 app = App
   renderer
   showFirstCursor
@@ -44,16 +48,16 @@ app = App
 
   where
     renderer cli | cli^.focusing `elem` [Timeline, Minibuffer] = return $ vBox
-      [ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
+      [ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b (cli ^. cardix n)) (cli^.focusing == Timeline) (cli ^. timeline)
       , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
       , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
       ]
     renderer cli | cli^.focusing == Item = return $ vBox
       [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
-        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
+        translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli ^. cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2))
       ]
     renderer cli | cli^.focusing == Textarea = return $ vBox
-      [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (renderCardWithIn (cli ^. size ^. _1)) (cli^.focusing == Timeline) (cli ^. timeline)
+      [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) (cli^.focusing == Timeline) (cli ^. timeline)
       , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^. _Just . to pluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
       , vLimit 5 $ W.renderEditor (cli^.focusing == Textarea) (cli ^. textarea)
       ]
@@ -73,7 +77,7 @@ app = App
           Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ curcard) >> continue cli
             where
-              curcard = cli^.timeline^.to W.listSelectedElement^?!_Just^._2
+              curcard = cli^.cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
               krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.pluginOf)) ^. to head ^. to keyRunner
           _ -> continue cli
         Textarea -> case evkey of
@@ -84,11 +88,9 @@ app = App
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
       AppEvent card -> do
-        continue $ cli &~ do
-          timeline %= W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) card
-
+        (continue =<<) $ newCardTL card cli <&> \cli -> cli &~ do
           let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
-          when (sel ^. pluginOf == sentinel ^. pluginOf) $ timeline %= W.listMoveDown
+          when (cli ^. cardix sel ^. pluginOf == sentinel ^. pluginOf) $ timeline %= W.listMoveDown
       _ -> continue cli
 
     colorscheme =
@@ -107,10 +109,11 @@ defClient s =
   Client
     s
     Timeline
-    (W.list "timeline" (V.singleton sentinel) 2)
+    (W.list "timeline" V.empty 2)
     (W.editorText "minibuffer" (txt . T.unlines) (Just 1) "")
     (W.editorText "textarea" (txt . T.unlines) (Just 5) "")
     (0,[])
+    IM.empty
 
 runClient :: [Plugin] -> IO ()
 runClient pls = do
@@ -124,7 +127,15 @@ runClient pls = do
     (Vty.standardIOConfig >>= Vty.mkVty)
     (Just chan)
     app
-    (defClient size & plugins .~ (0,pls))
+    =<< (defClient size & plugins .~ (0,pls) & newCardTL sentinel)
 
   return ()
+
+newCardTL :: MonadIO m => Card -> Client -> m Client
+newCardTL card cli = liftIO $ do
+  n <- hashUnique <$> newUnique
+  return $ cli & cardpool %~ IM.insert n card & timeline %~ W.listInsert (cli ^. timeline ^. W.listElementsL ^. to length - 1) n
+
+cardix :: Int -> Getter Client Card
+cardix n = to $ \c -> c ^. cardpool ^. to (IM.! n)
 
