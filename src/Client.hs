@@ -37,11 +37,20 @@ data Client
   , _notification :: W.List T.Text Int
   , _minibuffer :: W.Editor T.Text T.Text
   , _textarea :: W.Editor T.Text T.Text
-  , _plugins :: (Int, [Plugin])
+  , _plugins :: (Int, M.Map PluginId Plugin)
   , _cardpool :: IM.IntMap Card
   }
 
 makeLenses ''Client
+
+cardix :: Int -> Getter Client Card
+cardix n = to $ \c -> c ^. cardpool ^. to (IM.! n)
+
+selectedCard :: Getter Client Card
+selectedCard = to $ \cli -> cli ^. cardix (cli ^. timeline ^. to W.listSelectedElement ^?! _Just ^. _2)
+
+selectedPlugin :: Getter Client Plugin
+selectedPlugin = to $ \cli -> cli ^. plugins ^. _2 ^?! ix (M.keys (cli ^. plugins ^. _2) ^?! ix (cli ^. plugins ^. _1))
 
 app :: App Client Card T.Text
 app = App
@@ -60,16 +69,16 @@ app = App
         ]
       Item -> return $ vBox
         [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
-          translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli ^. cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2))
+          translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli ^. selectedCard)
         ]
       Compose -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 6) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) False (cli ^. timeline)
-        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^?! _Just ^. to pluginId ^. to textPluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
+        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. selectedPlugin ^. to pluginId ^. to textPluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
         , vLimit 5 $ W.renderEditor (cli^.focusing == Compose) (cli ^. textarea)
         ]
       ReplyTo tx -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 7) $ W.renderList (\b n -> renderCardWithIn (cli ^. size ^. _1) b $ (cli ^. cardix n)) False (cli ^. timeline)
-        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. plugins ^. _2 ^? ix (cli ^. plugins ^. _1) ^?! _Just ^. to pluginId ^. to textPluginId) `T.append` "] *reply* (C-c)send (C-q)quit (C-n)switch"
+        , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. selectedPlugin ^. to pluginId ^. to textPluginId) `T.append` "] *reply* (C-c)send (C-q)quit (C-n)switch"
         , withAttr "inverted" $ padRight Max $ txt tx
         , vLimit 5 $ W.renderEditor True (cli ^. textarea)
         ]
@@ -81,11 +90,12 @@ app = App
           Vty.EvKey (Vty.KChar 'x') [Vty.MMeta] -> continue $ cli & focusing .~ Minibuffer
           Vty.EvKey (Vty.KChar 'a') [Vty.MCtrl] -> continue $ cli & focusing .~ Compose
           Vty.EvKey (Vty.KChar 'a') [Vty.MMeta] -> do
-            let sel = cli^.cardix(cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
-            case cli^.plugins^._2^?!ix (cli^.plugins^._1)^.to (flip replyTo sel) of
+            let selplugin = cli^.plugins^._2^?!ix (cli^.selectedCard^.cardId^._CardId^._1)
+            case selplugin^.to (flip replyTo (cli^.selectedCard)) of
               Just rinfo -> continue $ cli
                 & textarea . W.editContentsL .~ textZipper [placeholder rinfo] Nothing
                 & focusing .~ ReplyTo (description rinfo)
+                & plugins . _1 .~ M.findIndex (selplugin ^. to pluginId) (cli ^. plugins ^. _2)
               Nothing -> continue cli
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Notification
           Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item
@@ -98,12 +108,12 @@ app = App
           Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ curcard) >> continue cli
             where
               curcard = cli^.cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
-              krmap = cli ^. plugins ^. _2 ^. to (filter (\t -> t^.to pluginId == curcard^.cardId^._CardId^._1)) ^. to head ^. to keyRunner
+              krmap = cli ^. plugins ^. _2 ^?! ix (curcard^.cardId^._CardId^._1) ^. to keyRunner
           _ -> continue cli
         Compose -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
-            liftIO (cli^.plugins^._2^?ix (cli^.plugins^._1)^._Just.to (flip updater (cli^.textarea^.to W.getEditContents)))
+            liftIO (cli^.selectedPlugin^.to (flip updater (cli^.textarea^.to W.getEditContents)))
             continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] | cli^.plugins^._2^.to length /= 0 -> continue $ cli & plugins . _1 %~ (\x -> (x+1) `mod` (length $ cli^.plugins^._2))
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
@@ -111,7 +121,7 @@ app = App
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl] -> do
             let sel = cli^.cardix (cli^.timeline^.to W.listSelectedElement^?!_Just^._2)
-            let Just rinfo = cli^.plugins^._2^?!ix (cli^.plugins^._1)^.to (flip replyTo sel)
+            let Just rinfo = cli^.selectedPlugin^.to (flip replyTo sel)
             liftIO $ replyUpdater rinfo (cli^.textarea^.to W.getEditContents)
             continue $ cli & focusing .~ Timeline & textarea . W.editContentsL %~ clearZipper
           _ -> handleEventLensed cli textarea W.handleEditorEvent evkey >>= continue
@@ -148,7 +158,7 @@ defClient s =
     (W.list "notification" V.empty 2)
     (W.editorText "minibuffer" (txt . T.unlines) (Just 1) "")
     (W.editorText "textarea" (txt . T.unlines) (Just 5) "")
-    (0,[])
+    (0,M.empty)
     IM.empty
 
 runClient :: [Plugin] -> IO ()
@@ -161,7 +171,7 @@ runClient pls = do
     (Vty.standardIOConfig >>= Vty.mkVty)
     (Just chan)
     app
-    =<< (defClient size & plugins .~ (0,pls) & newCardTL_ sentinel)
+    =<< (defClient size & plugins .~ (0, M.fromList $ fmap (\p -> (p^.to pluginId,p)) pls) & newCardTL_ sentinel)
 
   return ()
 
@@ -172,7 +182,4 @@ newCardTL card cli = liftIO $ do
 
 newCardTL_ :: MonadIO m => Card -> Client -> m Client
 newCardTL_ card cli = snd <$> newCardTL card cli
-
-cardix :: Int -> Getter Client Card
-cardix n = to $ \c -> c ^. cardpool ^. to (IM.! n)
 
