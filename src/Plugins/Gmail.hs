@@ -54,7 +54,7 @@ gmail account
       , oauthCallback = Just (unsafeCoerce "urn:ietf:wg:oauth:2.0:oob")
       }
 
-  fetcher :: BChan Card -> IO ()
+  fetcher :: BChan Item -> IO ()
   fetcher chan = do
     mgr <- newManager tlsManagerSettings
     value <- runAuth pluginId
@@ -86,7 +86,7 @@ gmail account
         Right lhr <- getter @ListHistoryResponse ([uri|https://www.googleapis.com/gmail/v1/users/me/history?historyTypes=messageAdded|] & queryL . queryPairsL <>~ [("startHistoryId", S8.pack $ show hid)])
         forM_ (lhr ^. lhrHistory ^.. each . hMessagesAdded . each . hmaMessage ^. to catMaybes ^.. each . mId ^. to catMaybes) $ \mid -> do
           Right msg <- getter @Message ([uri|https://www.googleapis.com/gmail/v1/users/me/messages/|] & pathL <>~ (S8.pack $ T.unpack mid))
-          writeBChan chan $ renderMessage msg
+          writeBChan chan $ ItemCard $ renderMessage msg
         threadDelay $ 1000 * 1000 * 60
         go getter $ lhr ^. lhrHistoryId ^?! _Just
 

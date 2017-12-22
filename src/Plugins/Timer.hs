@@ -39,7 +39,7 @@ hscheduler
     fetcher chan = forever $ do
       cur <- getZonedTime
       let next = cur & flexDT . hours +~ 1 & flexDT . minutes .~ 0 & flexDT . seconds .~ 0
-      writeBChan chan $ renderTimer (T.pack $ "current time: " ++ show cur ++ "\nnext: " ++ show next)
+      writeBChan chan $ ItemCard $ renderTimer (T.pack $ "current time: " ++ show cur ++ "\nnext: " ++ show next)
       let n = fromInteger $ (`div` (1000 * 1000)) $ diffTimeToPicoseconds $ ((if (next ^. timeAsDiff == 0) then 60 * 60 * 24 else next ^. timeAsDiff) - cur ^. timeAsDiff)
       threadDelay n
 
