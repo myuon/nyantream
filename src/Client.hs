@@ -69,12 +69,12 @@ app = App
       st | st `elem` [Timeline, Minibuffer] -> return $ vBox
         [ renderTimeline
         , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
-        , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
+        , W.renderEditor (txt . T.unlines) (cli^.focusing == Minibuffer) (cli ^. minibuffer)
         ]
       Notification -> return $ vBox
         [ W.renderList (\b n -> renderCardIdOrEvent b $ cli^.timeline^.W.listElementsL^?!ix n) (cli ^. focusing == Notification) (cli ^. notification)
         , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
-        , W.renderEditor (cli^.focusing == Minibuffer) (cli ^. minibuffer)
+        , W.renderEditor (txt . T.unlines) (cli^.focusing == Minibuffer) (cli ^. minibuffer)
         ]
       Item -> return $ vBox
         [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
@@ -83,13 +83,13 @@ app = App
       Compose -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 6) renderTimeline
         , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. selectedPlugin ^. to pluginId ^. to textPluginId) `T.append` "] *textarea* (C-c)send (C-q)quit (C-n)switch"
-        , vLimit 5 $ W.renderEditor (cli^.focusing == Compose) (cli ^. textarea)
+        , vLimit 5 $ W.renderEditor (txt . T.unlines) (cli^.focusing == Compose) (cli ^. textarea)
         ]
       ReplyTo tx -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 7) renderTimeline
         , withAttr "inverted" $ padRight Max $ txt $ "--- [" `T.append` (cli ^. selectedPlugin ^. to pluginId ^. to textPluginId) `T.append` "] *reply* (C-c)send (C-q)quit (C-n)switch"
         , withAttr "inverted" $ padRight Max $ txt tx
-        , vLimit 5 $ W.renderEditor True (cli ^. textarea)
+        , vLimit 5 $ W.renderEditor (txt . T.unlines) True (cli ^. textarea)
         ]
 
       where
@@ -159,6 +159,7 @@ app = App
                                                ItemCard card -> Right $ card^.cardId
                                                ItemEvent event -> Left event)
 
+          cli <- get
           let card = case item of {
             ItemCard card -> card;
             ItemEvent event -> cli^.cardpool^?!ix (event^.ref)}
@@ -189,8 +190,8 @@ defClient s =
     Timeline
     (W.list "timeline" V.empty 2)
     (W.list "notification" V.empty 2)
-    (W.editorText "minibuffer" (txt . T.unlines) (Just 1) "")
-    (W.editorText "textarea" (txt . T.unlines) (Just 5) "")
+    (W.editorText "minibuffer" (Just 1) "")
+    (W.editorText "textarea" Nothing "")
     (0,M.empty)
     M.empty
 
