@@ -32,6 +32,24 @@ data Card
 
 makeLenses ''Card
 
+data Event
+  = Event
+  { _eventType :: T.Text
+  , _ref :: CardId
+  , _display :: Markup AttrName -> Markup AttrName
+  }
+
+makeLenses ''Event
+
+data Item = ItemCard Card | ItemEvent Event
+
+makePrisms ''Item
+
+itemId :: Getter Item CardId
+itemId = to $ \case
+  (ItemCard card) -> card^.cardId
+  (ItemEvent event) -> event^.ref
+
 txtWrapper :: Int -> T.Text -> Widget n
 txtWrapper w tx = vBox $ fmap vBox $ fmap (fmap txt . reverse . T.foldl go []) $ T.lines tx where
   go :: [T.Text] -> Char -> [T.Text]
@@ -58,10 +76,10 @@ renderDetailCardWithIn w selected card =
 data Plugin
   = Plugin
   { pluginId :: PluginId
-  , fetcher :: BChan Card -> IO ()
+  , fetcher :: BChan Item -> IO ()
   , updater :: [T.Text] -> IO ()
   , replyTo :: Card -> Maybe ReplyInfo
-  , keyRunner :: M.Map Char (Card -> IO ())
+  , keyRunner :: M.Map Char (Item -> IO ())
   }
 
 data ReplyInfo

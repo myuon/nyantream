@@ -66,16 +66,16 @@ twitter account
           call twInfo manager $ update (T.unlines msg) & inReplyToStatusId ?~ card^.cardId^._CardId^._2^.to T.unpack^.to read
           return ()
 
-    favo :: Card -> IO ()
+    favo :: Item -> IO ()
     favo c = do
       twInfo <- getTWInfo account
       manager <- newManager tlsManagerSettings
-      call twInfo manager $ favoritesCreate (c^.cardId^._CardId^._2^.to T.unpack^.to read)
+      call twInfo manager $ favoritesCreate (c^.itemId^._CardId^._2^.to T.unpack^.to read)
       return ()
 
     twplugin = PluginId "tw" account
 
-    fetcher :: BChan Card -> IO ()
+    fetcher :: BChan Item -> IO ()
     fetcher chan = do
       twInfo <- getTWInfo account
       manager <- newManager tlsManagerSettings
@@ -84,14 +84,16 @@ twitter account
         src C.$$+- C.mapM_ (lift . fromStream chan)
 
       where
-        fromStream :: BChan Card -> StreamingAPI -> IO ()
+        fromStream :: BChan Item -> StreamingAPI -> IO ()
         fromStream chan api = case api of
-          SStatus tw -> writeBChan chan $ renderStatus account tw (shouldNotify api)
-          SRetweetedStatus rtw -> writeBChan chan $ renderStatus account (rtw^.rsRetweetedStatus) (shouldNotify api)
+          SStatus tw -> writeBChan chan $ ItemCard $ renderStatus account tw (shouldNotify api)
+          SRetweetedStatus rtw -> writeBChan chan $ ItemCard $ renderStatus account (rtw^.rsRetweetedStatus) (shouldNotify api)
             & title %~ (((rtw^.rsUser^.screen_name^.at_) @? "screen-name" <> " retweeted ") <>)
           SEvent ev | ev ^. evEvent == "favorite" -> case (ev^.evSource, ev^.evTargetObject) of
-            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ renderStatus account s (shouldNotify api)
-              & title %~ (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>)
+            (ETUser u, Just (ETStatus s)) -> writeBChan chan $ ItemEvent $ Event
+              { _eventType = "favorite"
+              , _ref = CardId twplugin $ s ^. statusId ^. to show ^. to T.pack
+              , _display = (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>) }
             _ -> return ()
           _ -> return ()
 
