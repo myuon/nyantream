@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.3.0.1
+- Update to lts-10.0 with ghc-8.2.2
+- Cardpool to store loaded statuses
+- Now a item in the timeline became a card and an event
+- The timeline collects all cards, other tabs (e.g. notification tab) refer to the timeline
+
 ## 0.3.0.0
 - Notification tab support
 - Twitter plugin:
