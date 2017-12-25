@@ -31,14 +31,15 @@ decodeMessage mp
   where
     replace c c' xs = xs >>= \x -> if x == c then [c'] else [x]
 
-gmail :: T.Text -> Plugin
-gmail account
+gmail :: T.Text -> BChan Item -> Plugin
+gmail account chan
   = Plugin
   { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> error "not implemented"
   , replyTo = \_ -> Nothing
   , keyRunner = M.empty
+  , loadThread = \_ -> return ()
   }
   where
   pluginId = PluginId "gm" account
@@ -54,8 +55,8 @@ gmail account
       , oauthCallback = Just (unsafeCoerce "urn:ietf:wg:oauth:2.0:oob")
       }
 
-  fetcher :: BChan Item -> IO ()
-  fetcher chan = do
+  fetcher :: IO ()
+  fetcher = do
     mgr <- newManager tlsManagerSettings
     value <- runAuth pluginId
     googleOAuth <- buildOAuth

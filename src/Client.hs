@@ -40,6 +40,10 @@ threadMoveDown :: Thread -> Thread
 threadMoveDown (Thread xs y (z:zs)) = Thread (y:xs) z zs
 threadMoveDown p = p
 
+loadThreadIds :: CardId -> M.Map CardId Card -> Thread
+loadThreadIds current db = Thread (go current) current [] where
+  go t = let card = db M.! t in maybe [] go (card^.inreplyto)
+
 data FocusOn
   = Timeline | Notification
   | Minibuffer
@@ -78,6 +82,9 @@ selectedItem = to $ \cli -> either ItemEvent (\n -> cli ^. cardix n ^. to ItemCa
 
 selectedCard :: Getter Client Card
 selectedCard = to $ \cli -> cli ^. cardix (either (^.ref) id $ cli ^. timeline ^. to W.listSelectedElement ^?! _Just ^. _2)
+
+pluginOfSelectedCard :: Getter Client Plugin
+pluginOfSelectedCard = to $ \cli -> cli^.plugins^._2 ^?! ix (cli^.selectedCard^.cardId^._CardId^._1)
 
 selectedPlugin :: Getter Client Plugin
 selectedPlugin = to $ \cli -> cli ^. plugins ^. _2 ^?! ix (M.keys (cli ^. plugins ^. _2) ^?! ix (cli ^. plugins ^. _1))
@@ -149,16 +156,22 @@ app = App
                 & plugins . _1 .~ M.findIndex (selplugin ^. to pluginId) (cli ^. plugins ^. _2)
               Nothing -> continue cli
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Notification
-          Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item (threadSingleton (cli^.selectedCard^.cardId))
+          Vty.EvKey (Vty.KChar 'i') [] -> do
+            liftIO $ (cli^.pluginOfSelectedCard^.to loadThread) $ cli^.selectedCard
+            continue $ cli & focusing .~ Item (loadThreadIds (cli^.selectedCard^.cardId) (cli^.cardpool))
           _ -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
         Minibuffer -> case evkey of
           Vty.EvKey (Vty.KChar 'g') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
-        Item _ -> case evkey of
+        Item thread -> case evkey of
           Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Timeline
-          Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ cli^.selectedItem) >> continue cli
+          Vty.EvKey Vty.KUp [] -> continue $ cli & focusing .~ Item (threadMoveUp thread)
+          Vty.EvKey Vty.KDown [] -> continue $ cli & focusing .~ Item (threadMoveDown thread)
+          Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> do
+            liftIO $ krmap M.! ch $ cli^.selectedItem
+            continue cli
             where
-              krmap = cli ^. plugins ^. _2 ^?! ix (cli^.selectedCard^.cardId^._CardId^._1) ^. to keyRunner
+              krmap = cli^.pluginOfSelectedCard^.to keyRunner
           _ -> continue cli
         Compose -> case evkey of
           Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
@@ -177,28 +190,36 @@ app = App
         Notification -> case evkey of
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           _ -> handleEventLensed cli notification W.handleListEvent evkey >>= continue
+      AppEvent (ItemCard card) | (card^.cardId) `M.member` (cli^.cardpool) -> continue cli
       AppEvent item -> do
         continue $ cli &~ do
           case item of
             ItemCard card -> cardpool %= M.insert (card^.cardId) card
             _ -> return ()
 
-          let tlindex = cli ^. timeline ^. W.listElementsL ^. to length - 1
-          timeline %= W.listInsert tlindex (case item of
-                                               ItemCard card -> Right $ card^.cardId
-                                               ItemEvent event -> Left event)
+          use focusing >>= \case
+            Item (Thread _ y _) -> do
+              pool <- use cardpool
+              focusing .= Item (loadThreadIds y pool)
+            _ -> return ()
 
-          cli <- use id
-          let card = case item of {
-            ItemCard card -> card;
-            ItemEvent event -> cli^.cardpool^?!ix (event^.ref)}
+          when (not (isCard item && "cache" `elem` (item^?!_ItemCard^.label))) $ do
+            let tlindex = cli ^. timeline ^. W.listElementsL ^. to length - 1
+            timeline %= W.listInsert tlindex (case item of
+                                                 ItemCard card -> Right $ card^.cardId
+                                                 ItemEvent event -> Left event)
 
-          when ("notify" `elem` card ^. label) $ do
-            notification %= W.listInsert (cli ^. notification ^. W.listElementsL ^. to length) tlindex
-            notification %= W.listMoveDown
+            let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
+            when (is _Right sel && cli^.cardix (sel^?!_Right)^.cardId == sentinel^.cardId) $ timeline %= W.listMoveDown
 
-          let Just (_,sel) = cli ^. timeline ^. to W.listSelectedElement
-          when (is _Right sel && cli^.cardix (sel^?!_Right)^.cardId == sentinel^.cardId) $ timeline %= W.listMoveDown
+            cli <- use id
+            let card = case item of {
+              ItemCard card -> card;
+              ItemEvent event -> cli^.cardpool^?!ix (event^.ref)}
+
+            when ("notify" `elem` card ^. label) $ do
+              notification %= W.listInsert (cli ^. notification ^. W.listElementsL ^. to length) tlindex
+              notification %= W.listMoveDown
       _ -> continue cli
 
     colorscheme =
@@ -224,18 +245,18 @@ defClient s =
     (0,M.empty)
     M.empty
 
-runClient :: [Plugin] -> IO ()
+runClient :: [BChan Item -> Plugin] -> IO ()
 runClient pls = do
   size <- Vty.displayBounds =<< Vty.outputForConfig =<< Vty.standardIOConfig
   chan <- newBChan 2
-  forM_ pls $ \p -> forkIO $ fetcher p chan
+  forM_ pls $ \p -> forkIO $ fetcher $ p chan
 
   customMain
     (Vty.standardIOConfig >>= Vty.mkVty)
     (Just chan)
     app
     $ defClient size
-    & plugins .~ (0, M.fromList $ fmap (\p -> (p^.to pluginId,p)) pls)
+    & plugins .~ (0, M.fromList $ fmap (\p -> (p^.to pluginId,p)) $ fmap (\p -> p chan) pls)
     & cardpool %~ M.insert (sentinel^.cardId) sentinel
     & timeline %~ W.listInsert 0 (Right $ sentinel^.cardId)
 

@@ -7,7 +7,6 @@ import Plugins.Twitter
 import Plugins.Timer
 import Plugins.Gmail
 
-installedPlugins :: [Plugin]
 installedPlugins =
   [ twitter "myuon_myon"
   , twitter "u_inai"

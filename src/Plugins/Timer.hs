@@ -12,14 +12,15 @@ import Data.Time.Lens
 import Types
 
 -- hourly
-hscheduler :: Plugin
-hscheduler
+hscheduler :: BChan Item -> Plugin
+hscheduler chan
   = Plugin
   { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> return ()
   , replyTo = \_ -> Nothing
   , keyRunner = M.empty
+  , loadThread = \_ -> return ()
   }
 
   where
@@ -37,7 +38,7 @@ hscheduler
       , _inreplyto = Nothing
       }
 
-    fetcher chan = forever $ do
+    fetcher = forever $ do
       cur <- getZonedTime
       let next = cur & flexDT . hours +~ 1 & flexDT . minutes .~ 0 & flexDT . seconds .~ 0
       writeBChan chan $ ItemCard $ renderTimer (T.pack $ "current time: " ++ show cur ++ "\nnext: " ++ show next)

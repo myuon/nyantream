@@ -46,6 +46,10 @@ data Item = ItemCard Card | ItemEvent Event
 
 makePrisms ''Item
 
+isCard :: Item -> Bool
+isCard (ItemCard _) = True
+isCard (ItemEvent _) = False
+
 itemId :: Getter Item CardId
 itemId = to $ \case
   (ItemCard card) -> card^.cardId
@@ -77,10 +81,11 @@ renderDetailCardWithIn w selected card =
 data Plugin
   = Plugin
   { pluginId :: PluginId
-  , fetcher :: BChan Item -> IO ()
+  , fetcher :: IO ()
   , updater :: [T.Text] -> IO ()
   , replyTo :: Card -> Maybe ReplyInfo
   , keyRunner :: M.Map Char (Item -> IO ())
+  , loadThread :: Card -> IO ()
   }
 
 data ReplyInfo
