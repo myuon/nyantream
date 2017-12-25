@@ -79,6 +79,7 @@ gmail account
         , _summary = msg ^. mSnippet ^?! _Just
         , _content = Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack
         , _label = if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else []
+        , _inreplyto = Nothing
         }
 
       go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()

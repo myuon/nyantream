@@ -108,7 +108,7 @@ twitter account
         renderStatus :: T.Text -> Status -> Bool -> Card
         renderStatus account tw notify
           = Card
-          { _cardId = CardId twplugin $ tw ^. statusId ^. to show ^. to T.pack
+          { _cardId = mkCardId (tw ^. statusId)
           , _speaker = tw ^. user ^. screen_name
           , _title = mconcat
             [ aux @? "aux"
@@ -126,9 +126,12 @@ twitter account
             , maybe "" (\e -> e ^. enURLs ^.. each . entityBody . ueExpanded ^. to T.unlines) (tw ^. statusEntities)
             ]
           , _label = if notify then ["notify"] else []
+          , _inreplyto = fmap mkCardId $ tw ^. statusInReplyToStatusId
           }
 
           where
+            mkCardId tid = CardId twplugin $ tid ^. to show ^. to T.pack
+
             maysurround st ed xs = if T.null xs then "" else st `T.append` xs `T.append` ed
 
             aux = T.concat

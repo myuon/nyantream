@@ -23,12 +23,38 @@ import Data.Unique
 
 import Types
 
+data Thread = Thread [CardId] CardId [CardId]
+  deriving Eq
+
+threadAddToHead :: CardId -> Thread -> Thread
+threadAddToHead c (Thread xs y zs) = Thread (xs ++ [c]) y zs
+
+threadSingleton :: CardId -> Thread
+threadSingleton x = Thread [] x []
+
+threadMoveUp :: Thread -> Thread
+threadMoveUp (Thread (x:xs) y zs) = Thread xs x (y:zs)
+threadMoveUp p = p
+
+threadMoveDown :: Thread -> Thread
+threadMoveDown (Thread xs y (z:zs)) = Thread (y:xs) z zs
+threadMoveDown p = p
+
 data FocusOn
   = Timeline | Notification
   | Minibuffer
   | Compose | ReplyTo T.Text
-  | Item
-  deriving (Eq, Show)
+  | Item Thread
+  deriving Eq
+
+focusTabname :: Getter FocusOn T.Text
+focusTabname = to $ \case
+  Timeline -> "timeline"
+  Notification -> "notification"
+  Minibuffer -> "minibuffer"
+  Compose -> "compose"
+  ReplyTo _ -> "reply"
+  Item _ -> "item"
 
 data Client
   = Client
@@ -68,17 +94,18 @@ app = App
     renderer cli = case cli^.focusing of
       st | st `elem` [Timeline, Minibuffer] -> return $ vBox
         [ renderTimeline
-        , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
+        , renderModeBar
         , W.renderEditor (txt . T.unlines) (cli^.focusing == Minibuffer) (cli ^. minibuffer)
         ]
       Notification -> return $ vBox
         [ W.renderList (\b n -> renderCardIdOrEvent b $ cli^.timeline^.W.listElementsL^?!ix n) (cli ^. focusing == Notification) (cli ^. notification)
-        , withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` T.pack (show $ cli ^. focusing) `T.append` "* [sys/tw/tm]"
+        , renderModeBar
         , W.renderEditor (txt . T.unlines) (cli^.focusing == Minibuffer) (cli ^. minibuffer)
         ]
-      Item -> return $ vBox
-        [ let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
-          translateBy (Location (0,4)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli ^. selectedCard)
+      Item (Thread xs y zs) -> return $ vBox
+        [ translateBy (Location (2,2)) $ str ((length xs + 1)^.to show ++ "/" ++ (length xs + length zs + 1)^.to show)
+        , let w = cli^.size^._1^.to fromIntegral^.to (* 0.7)^.to floor in
+          translateBy (Location (0,2)) $ W.hCenterLayer $ W.border $ padLeftRight 1 $ hLimit w $ renderDetailCardWithIn w (cli^.focusing == Timeline) (cli^.cardix y)
         ]
       Compose -> return $ vBox
         [ vLimit (cli ^. size ^. _2 - 6) renderTimeline
@@ -94,6 +121,8 @@ app = App
 
       where
         renderTimeline = W.renderList renderCardIdOrEvent (cli ^. focusing == Timeline) (cli ^. timeline)
+
+        renderModeBar = withAttr "inverted" $ padRight Max $ txt $ "--- *" `T.append` (cli ^. focusing ^. focusTabname) `T.append` "* [sys/tw/tm]"
 
         renderCardIdOrEvent b
           = either
@@ -120,12 +149,12 @@ app = App
                 & plugins . _1 .~ M.findIndex (selplugin ^. to pluginId) (cli ^. plugins ^. _2)
               Nothing -> continue cli
           Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> continue $ cli & focusing .~ Notification
-          Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item
+          Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Item (threadSingleton (cli^.selectedCard^.cardId))
           _ -> handleEventLensed cli timeline W.handleListEvent evkey >>= continue
         Minibuffer -> case evkey of
           Vty.EvKey (Vty.KChar 'g') [Vty.MCtrl] -> continue $ cli & focusing .~ Timeline
           _ -> handleEventLensed cli minibuffer W.handleEditorEvent evkey >>= continue
-        Item -> case evkey of
+        Item _ -> case evkey of
           Vty.EvKey (Vty.KChar 'i') [] -> continue $ cli & focusing .~ Timeline
           Vty.EvKey (Vty.KChar ch) [] | ch `M.member` krmap -> liftIO (krmap M.! ch $ cli^.selectedItem) >> continue cli
             where
@@ -159,7 +188,7 @@ app = App
                                                ItemCard card -> Right $ card^.cardId
                                                ItemEvent event -> Left event)
 
-          cli <- get
+          cli <- use id
           let card = case item of {
             ItemCard card -> card;
             ItemEvent event -> cli^.cardpool^?!ix (event^.ref)}
@@ -181,7 +210,7 @@ app = App
       ]
 
 sentinel :: Card
-sentinel = Card (CardId (PluginId "sys" "sentinel") "*") "" "sentinel" "--- fetching new cards ---" Nothing []
+sentinel = Card (CardId (PluginId "sys" "sentinel") "*") "" "sentinel" "--- fetching new cards ---" Nothing [] Nothing
 
 defClient :: (Int,Int) -> Client
 defClient s =

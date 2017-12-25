@@ -28,6 +28,7 @@ data Card
   , _summary :: T.Text
   , _content :: Maybe T.Text
   , _label :: [T.Text]
+  , _inreplyto :: Maybe CardId
   }
 
 makeLenses ''Card

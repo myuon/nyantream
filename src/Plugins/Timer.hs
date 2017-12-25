@@ -34,6 +34,7 @@ hscheduler
       , _summary = content
       , _content = Nothing
       , _label = []
+      , _inreplyto = Nothing
       }
 
     fetcher chan = forever $ do
