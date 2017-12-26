@@ -27,7 +27,7 @@ data Card
   , _title :: Markup AttrName
   , _summary :: T.Text
   , _content :: Maybe T.Text
-  , _label :: [T.Text]
+  , _labelCard :: [T.Text]
   , _inreplyto :: Maybe CardId
   }
 
@@ -38,9 +38,21 @@ data Event
   { _eventType :: T.Text
   , _ref :: CardId
   , _display :: Markup AttrName -> Markup AttrName
+  , _labelEvent :: [T.Text]
   }
 
 makeLenses ''Event
+
+class HasLabel c where
+  label :: Lens' c [T.Text]
+
+instance HasLabel Card where
+  label = labelCard
+
+instance HasLabel Event where
+  label = labelEvent
+
+--
 
 data Item = ItemCard Card | ItemEvent Event
 

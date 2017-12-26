@@ -213,11 +213,12 @@ app = App
             when (is _Right sel && cli^.cardix (sel^?!_Right)^.cardId == sentinel^.cardId) $ timeline %= W.listMoveDown
 
             cli <- use id
-            let card = case item of {
-              ItemCard card -> card;
-              ItemEvent event -> cli^.cardpool^?!ix (event^.ref)}
+            let lbl = case item of {
+              ItemCard card -> card^.label;
+              ItemEvent event -> event^.label ++ cli^.cardpool^.ix (event^.ref).label
+            }
 
-            when ("notify" `elem` card ^. label) $ do
+            when ("notify" `elem` lbl) $ do
               notification %= W.listInsert (cli ^. notification ^. W.listElementsL ^. to length) tlindex
               notification %= W.listMoveDown
       _ -> continue cli

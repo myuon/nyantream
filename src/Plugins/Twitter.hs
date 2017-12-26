@@ -81,7 +81,7 @@ twitter account chan
         , maybe "" (\e -> e ^. enMedia ^.. each . entityBody . to (\m -> (m ^. meType) `T.append` ":" `T.append` (m ^. meMediaURL)) ^. to T.unlines) (tw ^. statusEntities)
         , maybe "" (\e -> e ^. enURLs ^.. each . entityBody . ueExpanded ^. to T.unlines) (tw ^. statusEntities)
         ]
-      , _label = []
+      , _labelCard = []
       , _inreplyto = fmap mkCardId $ tw ^. statusInReplyToStatusId
       }
 
@@ -137,7 +137,9 @@ twitter account chan
             (ETUser u, Just (ETStatus s)) -> writeBChan chan $ ItemEvent $ Event
               { _eventType = "favorite"
               , _ref = CardId twplugin $ s ^. statusId ^. to show ^. to T.pack
-              , _display = (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>) }
+              , _display = (((u^.screen_name^.at_) @? "screen-name" <> " liked ") <>)
+              , _labelEvent = if s^.user^.screen_name == account then ["notify"] else []
+              }
             _ -> return ()
           _ -> return ()
 

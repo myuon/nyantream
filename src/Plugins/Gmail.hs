@@ -79,7 +79,7 @@ gmail account chan
         , _title = (msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject"
         , _summary = msg ^. mSnippet ^?! _Just
         , _content = Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack
-        , _label = if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else []
+        , _labelCard = if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else []
         , _inreplyto = Nothing
         }
 

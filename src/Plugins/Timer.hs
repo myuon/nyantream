@@ -34,7 +34,7 @@ hscheduler chan
       , _title = "timer"
       , _summary = content
       , _content = Nothing
-      , _label = []
+      , _labelCard = []
       , _inreplyto = Nothing
       }
 
