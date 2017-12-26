@@ -15,6 +15,7 @@ import Data.Text.Markup
 import Data.Monoid
 import Web.Twitter.Conduit hiding (lookup,url)
 import Web.Twitter.Types.Lens
+import Web.Browser (openBrowser)
 import Types
 
 getTWInfo :: T.Text -> IO TWInfo
@@ -37,7 +38,7 @@ twitter account chan
   , fetcher = fetcher
   , updater = updater
   , replyTo = replyTo
-  , keyRunner = M.fromList [('f', favo)]
+  , keyRunner = M.fromList [('f', favo), ('o', open)]
   , loadThread = loadThread
   }
 
@@ -46,6 +47,19 @@ twitter account chan
 
     at_ = to $ \x -> "@" `T.append` x
     space_end = to $ \x -> x `T.append` " "
+
+    favo :: Item -> IO ()
+    favo c = do
+      twInfo <- getTWInfo account
+      manager <- newManager tlsManagerSettings
+      call twInfo manager $ favoritesCreate (c^.itemId^._CardId^._2^.to T.unpack^.to read)
+      return ()
+
+    open :: Item -> IO ()
+    open (ItemCard c) = do
+      openBrowser $ T.unpack ("https://twitter.com/" `T.append` (c^.speaker) `T.append` "/status/" `T.append` (c^.cardId^._CardId^._2))
+      return ()
+    open _ = return ()
 
     renderStatus :: Status -> Card
     renderStatus tw
@@ -104,13 +118,6 @@ twitter account chan
           manager <- newManager tlsManagerSettings
           call twInfo manager $ update (T.unlines msg) & inReplyToStatusId ?~ card^.cardId^._CardId^._2^.to T.unpack^.to read
           return ()
-
-    favo :: Item -> IO ()
-    favo c = do
-      twInfo <- getTWInfo account
-      manager <- newManager tlsManagerSettings
-      call twInfo manager $ favoritesCreate (c^.itemId^._CardId^._2^.to T.unpack^.to read)
-      return ()
 
     fetcher :: IO ()
     fetcher = do

@@ -36,6 +36,7 @@ dependencies:
   - gogol-gmail
   - mime
   - utf8-string
+  - open-browser
 
 default-extensions:
   - Strict
