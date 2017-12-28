@@ -107,9 +107,10 @@ data ReplyInfo
   , replyUpdater :: [T.Text] -> IO ()
   }
 
-runAuth :: PluginId -> IO (Maybe Value)
+runAuth :: PluginId -> IO Value
 runAuth pluginId = do
   let path = "token/" ++ T.unpack (pluginId^.to textPluginId)
 --  createDirectoryIfMissing True path
-  decodeStrict <$> S8.readFile path
+  Just v <- decodeStrict <$> S8.readFile path
+  return v
 

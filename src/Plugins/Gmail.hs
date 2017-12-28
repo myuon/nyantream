@@ -48,8 +48,8 @@ gmail account chan
   buildOAuth = do
     value <- runAuth pluginId
     return $ OAuth2
-      { oauthClientId = value ^. key "client_id" ^?! _Just
-      , oauthClientSecret = value ^. key "client_secret" ^?! _Just
+      { oauthClientId = value ^? key "client_id" . _String ^?! _Just
+      , oauthClientSecret = value ^? key "client_secret" . _String ^?! _Just
       , oauthOAuthorizeEndpoint = [uri|https://accounts.google.com/o/oauth2/v2/auth|]
       , oauthAccessTokenEndpoint = [uri|https://www.googleapis.com/oauth2/v4/token|]
       , oauthCallback = Just (unsafeCoerce "urn:ietf:wg:oauth:2.0:oob")
@@ -60,7 +60,7 @@ gmail account chan
     mgr <- newManager tlsManagerSettings
     value <- runAuth pluginId
     googleOAuth <- buildOAuth
-    Right token <- fetchRefreshToken mgr googleOAuth (value ^. key "refresh_token" ^?! _Just)
+    Right token <- fetchRefreshToken mgr googleOAuth (value ^? key "refresh_token" . _String ^?! _Just ^. to RefreshToken)
 
     let getter :: forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)
         getter = authGetJSON @T.Text mgr (accessToken token)

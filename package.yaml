@@ -28,7 +28,7 @@ dependencies:
   - mtl
   - text-zipper
   - aeson
-  - aeson-lens
+  - lens-aeson
   - directory
   - hoauth2
   - http-conduit

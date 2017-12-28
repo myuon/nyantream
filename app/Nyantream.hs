@@ -1,18 +1,23 @@
 module Nyantream where
 
-import Client
-import Types
+import Control.Lens
+import Control.Monad
+import Data.Aeson
+import Data.Aeson.Lens
+import qualified Data.ByteString.Lazy as BS
 
 import Plugins.Twitter
 import Plugins.Timer
 import Plugins.Gmail
+import Client
 
-installedPlugins =
-  [ twitter "myuon_myon"
-  , twitter "u_inai"
-  , gmail "ioijoikoiloi"
-  , hscheduler
-  ]
+main = do
+  json <- BS.readFile "config.json"
+  installedPlugins <- forM (json ^?! _JSON :: [Value]) $ \p -> do
+    case p ^?! key "plugin" of
+      "twitter" -> return $ twitter (p ^?! key "account" . _String)
+      "gmail" -> return $ gmail (p ^?! key "account" . _String)
+      "timer" -> return $ hscheduler
 
-main = runClient installedPlugins
+  runClient installedPlugins
 
