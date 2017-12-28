@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.3.1.0
+- CreateFavorite event will appear in the notification tab
+- 'o' for open in browser action in Twitter plugin
+- Use config.json for managin plugins
+
 ## 0.3.0.1
 - Update to lts-10.0 with ghc-8.2.2
 - Cardpool to store loaded statuses
