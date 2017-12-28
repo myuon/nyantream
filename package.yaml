@@ -1,5 +1,5 @@
 name:                nyantream
-version:             0.3.0.1
+version:             0.3.1.0
 #synopsis:
 #description:
 homepage:            https://github.com/myuon/nyantream#readme
@@ -28,7 +28,7 @@ dependencies:
   - mtl
   - text-zipper
   - aeson
-  - aeson-lens
+  - lens-aeson
   - directory
   - hoauth2
   - http-conduit
@@ -36,6 +36,7 @@ dependencies:
   - gogol-gmail
   - mime
   - utf8-string
+  - open-browser
 
 default-extensions:
   - Strict

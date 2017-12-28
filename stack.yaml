@@ -2,5 +2,4 @@ packages:
 - .
 extra-deps:
 - mime-0.4.0.2
-- aeson-lens-0.5.0.0
 resolver: lts-10.0

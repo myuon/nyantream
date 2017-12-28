@@ -31,14 +31,15 @@ decodeMessage mp
   where
     replace c c' xs = xs >>= \x -> if x == c then [c'] else [x]
 
-gmail :: T.Text -> Plugin
-gmail account
+gmail :: T.Text -> BChan Item -> Plugin
+gmail account chan
   = Plugin
   { pluginId = pluginId
   , fetcher = fetcher
   , updater = \_ -> error "not implemented"
   , replyTo = \_ -> Nothing
   , keyRunner = M.empty
+  , loadThread = \_ -> return ()
   }
   where
   pluginId = PluginId "gm" account
@@ -47,19 +48,19 @@ gmail account
   buildOAuth = do
     value <- runAuth pluginId
     return $ OAuth2
-      { oauthClientId = value ^. key "client_id" ^?! _Just
-      , oauthClientSecret = value ^. key "client_secret" ^?! _Just
+      { oauthClientId = value ^? key "client_id" . _String ^?! _Just
+      , oauthClientSecret = value ^? key "client_secret" . _String ^?! _Just
       , oauthOAuthorizeEndpoint = [uri|https://accounts.google.com/o/oauth2/v2/auth|]
       , oauthAccessTokenEndpoint = [uri|https://www.googleapis.com/oauth2/v4/token|]
       , oauthCallback = Just (unsafeCoerce "urn:ietf:wg:oauth:2.0:oob")
       }
 
-  fetcher :: BChan Item -> IO ()
-  fetcher chan = do
+  fetcher :: IO ()
+  fetcher = do
     mgr <- newManager tlsManagerSettings
     value <- runAuth pluginId
     googleOAuth <- buildOAuth
-    Right token <- fetchRefreshToken mgr googleOAuth (value ^. key "refresh_token" ^?! _Just)
+    Right token <- fetchRefreshToken mgr googleOAuth (value ^? key "refresh_token" . _String ^?! _Just ^. to RefreshToken)
 
     let getter :: forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)
         getter = authGetJSON @T.Text mgr (accessToken token)
@@ -78,7 +79,8 @@ gmail account
         , _title = (msg ^. mPayload ^?! _Just ^. mpHeaders ^. to (fmap (\t -> (t ^. mphName ^?! _Just, t ^. mphValue ^?! _Just))) ^. to (lookup "Subject") ^?! _Just) @? "mail-subject"
         , _summary = msg ^. mSnippet ^?! _Just
         , _content = Just $ msg ^. mPayload ^?! _Just ^. to decodeMessage ^. to T.pack
-        , _label = if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else []
+        , _labelCard = if "IMPORTANT" `elem` msg ^. mLabelIds then ["notify"] else []
+        , _inreplyto = Nothing
         }
 
       go :: (forall a. FromJSON a => URI -> IO (OAuth2Result T.Text a)) -> Word64 -> IO ()

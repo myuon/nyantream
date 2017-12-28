@@ -27,7 +27,8 @@ data Card
   , _title :: Markup AttrName
   , _summary :: T.Text
   , _content :: Maybe T.Text
-  , _label :: [T.Text]
+  , _labelCard :: [T.Text]
+  , _inreplyto :: Maybe CardId
   }
 
 makeLenses ''Card
@@ -37,13 +38,29 @@ data Event
   { _eventType :: T.Text
   , _ref :: CardId
   , _display :: Markup AttrName -> Markup AttrName
+  , _labelEvent :: [T.Text]
   }
 
 makeLenses ''Event
 
+class HasLabel c where
+  label :: Lens' c [T.Text]
+
+instance HasLabel Card where
+  label = labelCard
+
+instance HasLabel Event where
+  label = labelEvent
+
+--
+
 data Item = ItemCard Card | ItemEvent Event
 
 makePrisms ''Item
+
+isCard :: Item -> Bool
+isCard (ItemCard _) = True
+isCard (ItemEvent _) = False
 
 itemId :: Getter Item CardId
 itemId = to $ \case
@@ -76,10 +93,11 @@ renderDetailCardWithIn w selected card =
 data Plugin
   = Plugin
   { pluginId :: PluginId
-  , fetcher :: BChan Item -> IO ()
+  , fetcher :: IO ()
   , updater :: [T.Text] -> IO ()
   , replyTo :: Card -> Maybe ReplyInfo
   , keyRunner :: M.Map Char (Item -> IO ())
+  , loadThread :: Card -> IO ()
   }
 
 data ReplyInfo
@@ -89,9 +107,10 @@ data ReplyInfo
   , replyUpdater :: [T.Text] -> IO ()
   }
 
-runAuth :: PluginId -> IO (Maybe Value)
+runAuth :: PluginId -> IO Value
 runAuth pluginId = do
   let path = "token/" ++ T.unpack (pluginId^.to textPluginId)
 --  createDirectoryIfMissing True path
-  decodeStrict <$> S8.readFile path
+  Just v <- decodeStrict <$> S8.readFile path
+  return v
 
