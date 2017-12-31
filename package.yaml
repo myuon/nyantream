@@ -1,5 +1,5 @@
 name:                nyantream
-version:             0.3.1.0
+version:             0.3.2.0
 #synopsis:
 #description:
 homepage:            https://github.com/myuon/nyantream#readme
@@ -37,6 +37,7 @@ dependencies:
   - mime
   - utf8-string
   - open-browser
+  - slack-api
 
 default-extensions:
   - Strict

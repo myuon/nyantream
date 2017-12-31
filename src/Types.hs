@@ -111,6 +111,8 @@ runAuth :: PluginId -> IO Value
 runAuth pluginId = do
   let path = "token/" ++ T.unpack (pluginId^.to textPluginId)
 --  createDirectoryIfMissing True path
-  Just v <- decodeStrict <$> S8.readFile path
-  return v
+  r <- decodeStrict <$> S8.readFile path
+  case r of
+    Just v -> return v
+    Nothing -> error $ "failed to load/parse: " ++ path
 

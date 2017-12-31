@@ -9,6 +9,7 @@ import qualified Data.ByteString.Lazy as BS
 import Plugins.Twitter
 import Plugins.Timer
 import Plugins.Gmail
+import Plugins.Slack
 import Client
 
 main = do
@@ -18,6 +19,7 @@ main = do
       "twitter" -> return $ twitter (p ^?! key "account" . _String)
       "gmail" -> return $ gmail (p ^?! key "account" . _String)
       "timer" -> return $ hscheduler
+      "slack" -> return $ slack (p ^?! key "account" . _String)
 
   runClient installedPlugins
 
