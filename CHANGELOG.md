@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.3.2.0
+- Support Slack plugin
+
 ## 0.3.1.0
 - CreateFavorite event will appear in the notification tab
 - 'o' for open in browser action in Twitter plugin
