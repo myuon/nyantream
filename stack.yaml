@@ -1,5 +1,7 @@
+flags: {}
 packages:
 - .
 extra-deps:
 - mime-0.4.0.2
+- slack-api-0.12
 resolver: lts-10.1

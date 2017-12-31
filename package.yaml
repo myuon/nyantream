@@ -37,6 +37,7 @@ dependencies:
   - mime
   - utf8-string
   - open-browser
+  - slack-api
 
 default-extensions:
   - Strict
